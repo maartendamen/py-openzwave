@@ -5,8 +5,8 @@ from Cython.Distutils import build_ext
 ext_modules = [extension.Extension("openzwave", ["openzwave.pyx"],
                          libraries=['setupapi', 'stdc++'],
                          language="c++",
-                         extra_objects=['../openzwave/cpp/lib/windows-mingw32/openzwave.a'],
-                         include_dirs=['../openzwave/cpp/src', '../openzwave/cpp/src/value_classes', '../openzwave/cpp/src/platform']
+                         extra_objects=['openzwave/cpp/lib/windows-mingw32/openzwave.a'],
+                         include_dirs=['openzwave/cpp/src', 'openzwave/cpp/src/value_classes', 'openzwave/cpp/src/platform']
 )]
 setup(
   name = 'py-openzwave',

@@ -42,12 +42,19 @@ cdef extern from "Notification.h" namespace "OpenZWave::Notification":
 		Type_AwakeNodesQueried = 16
 		Type_AllNodesQueried = 17
 		
+cdef extern from "ValueID.h" namespace "OpenZWave":
+
+	cdef cppclass ValueID:
+		uint8 GetCommandClassId()
+		uint8 GetIndex()
+		
 cdef extern from "Notification.h" namespace "OpenZWave":
 
 	cdef cppclass Notification:
 		NotificationType GetType()
 		uint32 GetHomeId()
 		uint8 GetNodeId()
+		ValueID& GetValueID()
 
 ctypedef void (*pfnOnNotification_t)(const_notification _pNotification, void* _context )
 
@@ -66,6 +73,7 @@ cdef extern from "Manager.h" namespace "OpenZWave":
 		uint32 GetNodeMaxBaudRate(uint32 homeid, uint8 nodeid)
 		uint8 GetNodeBasic(uint32 homeid, uint8 nodeid)
 		uint8 GetNodeGeneric(uint32 homeid, uint8 nodeid)
+		bint GetValueAsByte(ValueID& id, uint8* o_value)
 
 cdef extern from "Manager.h" namespace "OpenZWave::Manager":
 	Manager* Create()
@@ -80,7 +88,15 @@ cdef class PyOptions:
 	def lock(self):
 		return self.options.Lock()
 
-g_homeid = None
+cdef void value_callback(int homeid, int nodeid, ValueID _valueid, void* _context, int type):
+	cdef uint8 bytevalue
+	cdef Manager *manager = Get()
+	
+	manager.GetValueAsByte( _valueid, &bytevalue)
+	commandclassid = _valueid.GetCommandClassId()
+	index = _valueid.GetIndex()
+	
+	(<object>_context)(type, homeid, nodeid, commandclassid, index, bytevalue)
 
 cdef void callback(const_notification _notification, void* _context) with gil:
 
@@ -89,12 +105,18 @@ cdef void callback(const_notification _notification, void* _context) with gil:
 
 	if type == Type_DriverReady:
 		g_homeid = notification.GetHomeId()
+		print g_homeid
 		(<object>_context)(type, g_homeid)
 		
 	elif type == Type_ValueAdded:
 		homeid = notification.GetHomeId()
 		nodeid = notification.GetNodeId()
-		(<object>_context)(type, homeid, nodeid)
+		value_callback(homeid, nodeid, notification.GetValueID(), _context, Type_ValueAdded)
+
+	elif type == Type_ValueChanged:
+		homeid = notification.GetHomeId()
+		nodeid = notification.GetNodeId()
+		value_callback(homeid, nodeid, notification.GetValueID(), _context, Type_ValueChanged)
 		
 	elif type == Type_AllNodesQueried:
 		(<object>_context)(type)
