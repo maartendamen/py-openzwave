@@ -74,6 +74,8 @@ cdef extern from "Manager.h" namespace "OpenZWave":
 		uint8 GetNodeBasic(uint32 homeid, uint8 nodeid)
 		uint8 GetNodeGeneric(uint32 homeid, uint8 nodeid)
 		bint GetValueAsByte(ValueID& id, uint8* o_value)
+		bint EnablePoll(ValueID valueid)
+		void SetPollInterval(int seconds)
 
 cdef extern from "Manager.h" namespace "OpenZWave::Manager":
 	Manager* Create()
@@ -95,6 +97,11 @@ cdef void value_callback(int homeid, int nodeid, ValueID _valueid, void* _contex
 	manager.GetValueAsByte( _valueid, &bytevalue)
 	commandclassid = _valueid.GetCommandClassId()
 	index = _valueid.GetIndex()
+	
+	# Add polling // Dirty hack
+	if nodeid != 1 and commandclassid == 32:
+		manager.SetPollInterval(60)
+		manager.EnablePoll(_valueid)
 	
 	(<object>_context)(type, homeid, nodeid, commandclassid, index, bytevalue)
 
