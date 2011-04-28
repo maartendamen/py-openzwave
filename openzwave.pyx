@@ -1,3 +1,5 @@
+from cython.operator cimport dereference as deref
+
 cdef extern from "<string>" namespace "std":
     cdef cppclass string:
         string()
@@ -44,9 +46,34 @@ cdef extern from "Notification.h" namespace "OpenZWave::Notification":
 
 cdef extern from "ValueID.h" namespace "OpenZWave":
 
+    cdef enum ValueGenre:
+        ValueGenre_Basic = 0
+        ValueGenre_User = 1
+        ValueGenre_Config = 2
+        ValueGenre_System = 3
+        ValueGenre_Count = 4
+
+    cdef enum ValueType:
+        ValueType_Bool = 0
+        ValueType_Byte = 1
+        ValueType_Decimal = 2
+        ValueType_Int = 3
+        ValueType_List = 4
+        ValueType_Schedule = 5
+        ValueType_Short = 6
+        ValueType_String = 7
+        ValueType_Button = 8
+        ValueType_Max = ValueType_Button
+
     cdef cppclass ValueID:
+        uint32 GetHomeId()
+        uint8 GetNodeId()
+        ValueGenre GetGenre()
         uint8 GetCommandClassId()
+        uint8 GetInstance()
         uint8 GetIndex()
+        ValueType GetType()
+        uint32 GetId()
 
 cdef extern from "Notification.h" namespace "OpenZWave":
 
@@ -55,6 +82,9 @@ cdef extern from "Notification.h" namespace "OpenZWave":
         uint32 GetHomeId()
         uint8 GetNodeId()
         ValueID& GetValueID()
+        uint8 GetGroupIdx()
+        uint8 GetEvent()
+        uint8 GetByte()
 
 ctypedef void (*pfnOnNotification_t)(const_notification _pNotification, void* _context )
 
@@ -177,48 +207,73 @@ cdef class PyOptions:
     def lock(self):
         return self.options.Lock()
 
-cdef void value_callback(int homeid, int nodeid, ValueID _valueid, void* _context, int type):
-    cdef uint8 bytevalue
-    cdef Manager *manager = Get()
+cdef class PyValueId:
+    VALUE_GENRES = ('Basic', 'User', 'Config', 'System', 'Count')
+    VALUE_TYPES = ('Bool','Byte','Decimal','Int','List','Schedule','Short','String','Button')
 
-    manager.GetValueAsByte( _valueid, &bytevalue)
-    commandclassid = _valueid.GetCommandClassId()
-    index = _valueid.GetIndex()
+    cdef uint32 _homeid
+    cdef uint8 _nodeid
+    cdef uint8 _genre
+    cdef uint8 _commandclassid
+    cdef uint8 _instance
+    cdef uint8 _index
+    cdef uint8 _type
+    cdef uint32 _id
 
-    # Add polling // Dirty hack
-    if nodeid != 1 and commandclassid == 32:
-        manager.SetPollInterval(60)
-        manager.EnablePoll(_valueid)
+    def __init__(self, homeid, nodeid, genre, commandclassid, instance, index, type, id):
+        self._homeid = homeid
+        self._nodeid = nodeid
+        self._genre = genre
+        self._commandclassid = commandclassid
+        self._instance = instance
+        self._index = index
+        self._type = type
+        self._id = id
 
-    (<object>_context)(type, homeid, nodeid, commandclassid, index, bytevalue)
+    def getHomeId(self):
+         return self._homeid
+
+    def getNodeId(self):
+        return self._nodeid
+
+    def getGenre(self):
+        return self._genre
+
+    def getCommandClassId(self):
+        return self._commandclassid
+
+    def getInstance(self):
+        return self._instance
+
+    def getIndex(self):
+        return self._index
+
+    def getType(self):
+        return self._type
+
+    def getId(self):
+        return self._id
+
+    def __str__(self):
+        return 'HomeID: [0x%0.8x] NodeID: [%d] Genre: [%s] CommandClass: [%s] Instance: [%d] Index: [%d] Type: [%s] Id: [0x%0.8x]' % \
+            (self._homeid, self._nodeid, PyValueId.VALUE_GENRES[self._genre],
+             PyManager.COMMAND_CLASS_DESC[self._commandclassid], self._instance, self._index,
+             PyValueId.VALUE_TYPES[self._type], self._id)
+
+cdef void do_callback(uint8 notificationtype, void* context, uint32 homeid, uint8 nodeid, uint8 groupidx, uint8 event, ValueID valueid):
+    vid = PyValueId(homeid, nodeid, <int>valueid.GetGenre(), valueid.GetCommandClassId(), valueid.GetInstance(),
+                    valueid.GetIndex(), <int>valueid.GetType(), valueid.GetId())
+    (<object>context)(notificationtype, homeid, nodeid, vid, groupidx, event)
 
 cdef void callback(const_notification _notification, void* _context) with gil:
-
     cdef Notification* notification = <Notification*>_notification
     type = notification.GetType()
+    homeid = notification.GetHomeId()
+    nodeid = notification.GetNodeId()
+    groupIdx = notification.GetGroupIdx() if type == Type_Group else 0xff
+    event = notification.GetEvent() if type == Type_NodeEvent else 0xff
+    do_callback(type, _context, homeid, nodeid, groupIdx, event, notification.GetValueID())
 
-    if type == Type_DriverReady:
-        g_homeid = notification.GetHomeId()
-        print g_homeid
-        (<object>_context)(type, g_homeid)
-
-    elif type == Type_ValueAdded:
-        homeid = notification.GetHomeId()
-        nodeid = notification.GetNodeId()
-        value_callback(homeid, nodeid, notification.GetValueID(), _context, Type_ValueAdded)
-
-    elif type == Type_ValueChanged:
-        homeid = notification.GetHomeId()
-        nodeid = notification.GetNodeId()
-        value_callback(homeid, nodeid, notification.GetValueID(), _context, Type_ValueChanged)
-
-    elif type == Type_AllNodesQueried:
-        (<object>_context)(type)
-
-    elif type == Type_NodeAdded:
-        homeid = notification.GetHomeId()
-        nodeid = notification.GetNodeId()
-        (<object>_context)(type, homeid, nodeid)
 
 cdef class PyManager:
     '''
@@ -265,6 +320,98 @@ information, like the physical device's capabilities, session information (like
 state) to be available.  Finally, after all nodes (whether listening or
 sleeping) have been polled, an "AllNodesQueried" notification is sent.]
     '''
+    COMMAND_CLASS_DESC = {
+        0x00: 'COMMAND_CLASS_NO_OPERATION',
+        0x20: 'COMMAND_CLASS_BASIC',
+        0x21: 'COMMAND_CLASS_CONTROLLER_REPLICATION',
+        0x22: 'COMMAND_CLASS_APPLICATION_STATUS',
+        0x23: 'COMMAND_CLASS_ZIP_SERVICES',
+        0x24: 'COMMAND_CLASS_ZIP_SERVER',
+        0x25: 'COMMAND_CLASS_SWITCH_BINARY',
+        0x26: 'COMMAND_CLASS_SWITCH_MULTILEVEL',
+        0x27: 'COMMAND_CLASS_SWITCH_ALL',
+        0x28: 'COMMAND_CLASS_SWITCH_TOGGLE_BINARY',
+        0x29: 'COMMAND_CLASS_SWITCH_TOGGLE_MULTILEVEL',
+        0x2A: 'COMMAND_CLASS_CHIMNEY_FAN',
+        0x2B: 'COMMAND_CLASS_SCENE_ACTIVATION',
+        0x2C: 'COMMAND_CLASS_SCENE_ACTUATOR_CONF',
+        0x2D: 'COMMAND_CLASS_SCENE_CONTROLLER_CONF',
+        0x2E: 'COMMAND_CLASS_ZIP_CLIENT',
+        0x2F: 'COMMAND_CLASS_ZIP_ADV_SERVICES',
+        0x30: 'COMMAND_CLASS_SENSOR_BINARY',
+        0x31: 'COMMAND_CLASS_SENSOR_MULTILEVEL',
+        0x32: 'COMMAND_CLASS_METER',
+        0x33: 'COMMAND_CLASS_ZIP_ADV_SERVER',
+        0x34: 'COMMAND_CLASS_ZIP_ADV_CLIENT',
+        0x35: 'COMMAND_CLASS_METER_PULSE',
+        0x3C: 'COMMAND_CLASS_METER_TBL_CONFIG',
+        0x3D: 'COMMAND_CLASS_METER_TBL_MONITOR',
+        0x3E: 'COMMAND_CLASS_METER_TBL_PUSH',
+        0x38: 'COMMAND_CLASS_THERMOSTAT_HEATING',
+        0x40: 'COMMAND_CLASS_THERMOSTAT_MODE',
+        0x42: 'COMMAND_CLASS_THERMOSTAT_OPERATING_STATE',
+        0x43: 'COMMAND_CLASS_THERMOSTAT_SETPOINT',
+        0x44: 'COMMAND_CLASS_THERMOSTAT_FAN_MODE',
+        0x45: 'COMMAND_CLASS_THERMOSTAT_FAN_STATE',
+        0x46: 'COMMAND_CLASS_CLIMATE_CONTROL_SCHEDULE',
+        0x47: 'COMMAND_CLASS_THERMOSTAT_SETBACK',
+        0x4c: 'COMMAND_CLASS_DOOR_LOCK_LOGGING',
+        0x4E: 'COMMAND_CLASS_SCHEDULE_ENTRY_LOCK',
+        0x50: 'COMMAND_CLASS_BASIC_WINDOW_COVERING',
+        0x51: 'COMMAND_CLASS_MTP_WINDOW_COVERING',
+        0x60: 'COMMAND_CLASS_MULTI_CHANNEL_V2',
+        0x62: 'COMMAND_CLASS_DOOR_LOCK',
+        0x63: 'COMMAND_CLASS_USER_CODE',
+        0x70: 'COMMAND_CLASS_CONFIGURATION',
+        0x71: 'COMMAND_CLASS_ALARM',
+        0x72: 'COMMAND_CLASS_MANUFACTURER_SPECIFIC',
+        0x73: 'COMMAND_CLASS_POWERLEVEL',
+        0x75: 'COMMAND_CLASS_PROTECTION',
+        0x76: 'COMMAND_CLASS_LOCK',
+        0x77: 'COMMAND_CLASS_NODE_NAMING',
+        0x7A: 'COMMAND_CLASS_FIRMWARE_UPDATE_MD',
+        0x7B: 'COMMAND_CLASS_GROUPING_NAME',
+        0x7C: 'COMMAND_CLASS_REMOTE_ASSOCIATION_ACTIVATE',
+        0x7D: 'COMMAND_CLASS_REMOTE_ASSOCIATION',
+        0x80: 'COMMAND_CLASS_BATTERY',
+        0x81: 'COMMAND_CLASS_CLOCK',
+        0x82: 'COMMAND_CLASS_HAIL',
+        0x84: 'COMMAND_CLASS_WAKE_UP',
+        0x85: 'COMMAND_CLASS_ASSOCIATION',
+        0x86: 'COMMAND_CLASS_VERSION',
+        0x87: 'COMMAND_CLASS_INDICATOR',
+        0x88: 'COMMAND_CLASS_PROPRIETARY',
+        0x89: 'COMMAND_CLASS_LANGUAGE',
+        0x8A: 'COMMAND_CLASS_TIME',
+        0x8B: 'COMMAND_CLASS_TIME_PARAMETERS',
+        0x8C: 'COMMAND_CLASS_GEOGRAPHIC_LOCATION',
+        0x8D: 'COMMAND_CLASS_COMPOSITE',
+        0x8E: 'COMMAND_CLASS_MULTI_INSTANCE_ASSOCIATION',
+        0x8F: 'COMMAND_CLASS_MULTI_CMD',
+        0x90: 'COMMAND_CLASS_ENERGY_PRODUCTION',
+        0x91: 'COMMAND_CLASS_MANUFACTURER_PROPRIETARY',
+        0x92: 'COMMAND_CLASS_SCREEN_MD',
+        0x93: 'COMMAND_CLASS_SCREEN_ATTRIBUTES',
+        0x94: 'COMMAND_CLASS_SIMPLE_AV_CONTROL',
+        0x95: 'COMMAND_CLASS_AV_CONTENT_DIRECTORY_MD',
+        0x96: 'COMMAND_CLASS_AV_RENDERER_STATUS',
+        0x97: 'COMMAND_CLASS_AV_CONTENT_SEARCH_MD',
+        0x98: 'COMMAND_CLASS_SECURITY',
+        0x99: 'COMMAND_CLASS_AV_TAGGING_MD',
+        0x9A: 'COMMAND_CLASS_IP_CONFIGURATION',
+        0x9B: 'COMMAND_CLASS_ASSOCIATION_COMMAND_CONFIGURATION',
+        0x9C: 'COMMAND_CLASS_SENSOR_ALARM',
+        0x9D: 'COMMAND_CLASS_SILENCE_ALARM',
+        0x9E: 'COMMAND_CLASS_SENSOR_CONFIGURATION',
+        0xEF: 'COMMAND_CLASS_MARK',
+        0xF0: 'COMMAND_CLASS_NON_INTEROPERABLE'
+    }
+
+    CALLBACK_DESC = ('value added','value removed','value changed','groups changed','new node','node added',
+                     'node removed','node protocol info','node naming','node event','polling disabled',
+                     'polling enabled','driver ready','driver reset','message complete','node queries complete',
+                     'awake nodes queried','all nodes queried')
+
     cdef Manager *manager
 
     def create(self):
