@@ -279,8 +279,10 @@ Once the Manager has been created, call AddWatcher to install a notification
 callback handler, and then call the AddDriver method for each attached PC
 Z-Wave controller in turn.
 
-@param options a locked Options object containing all the application's configurable option values.
-@return a pointer to the newly created Manager object, or NULL if creation failed.
+@param options a locked Options object containing all the application's
+configurable option values.
+@return a pointer to the newly created Manager object, or NULL if creation
+failed.
 @see options, get, addWatcher, addDriver
         '''
         self.manager = Create()
@@ -341,7 +343,8 @@ Removes the driver for a Z-Wave controller, and closes the controller.
 Drivers do not need to be explicitly removed before calling Destroy - this is
 handled automatically.
 
-@param controllerPath The same string as was passed in the original call to AddDriver.
+@param controllerPath The same string as was passed in the original call to
+AddDriver.
 @return True if the driver was removed, False if it could not be found.
 @see AddDriver
         '''
@@ -939,7 +942,8 @@ Get whether the node information has been received
 #
     def switchAllOn(self, homeid):
         '''
-Switch all devices on.  All devices that support the SwitchAll command class will be turned on.
+Switch all devices on.  All devices that support the SwitchAll command class
+will be turned on.
 
 @param homeId The Home ID of the Z-Wave controller that manages the node.
         '''
@@ -947,7 +951,8 @@ Switch all devices on.  All devices that support the SwitchAll command class wil
 
     def switchAllOff(self, homeid):
         '''
-Switch all devices off.  All devices that support the SwitchAll command class will be turned off.
+Switch all devices off.  All devices that support the SwitchAll command class
+will be turned off.
 
 @param homeId The Home ID of the Z-Wave controller that manages the node.
         '''
@@ -1058,7 +1063,8 @@ Gets the maximum number of associations for a group.
 
 @param homeId The Home ID of the Z-Wave controller that manages the node.
 @param nodeId The ID of the node whose associations we are interested in.
-@param groupIdx one-based index of the group (because Z-Wave product manuals use one-based group numbering).
+@param groupIdx one-based index of the group (because Z-Wave product manuals
+use one-based group numbering).
 @return The maximum number of nodes that can be associated into the group.
 @see getNumGroups, addAssociation, removeAssociation, getAssociations
         '''
@@ -1133,7 +1139,8 @@ via callbacks.  This method allows the application to add a notification
 callback handler, known as a "watcher" to OpenZWave.  An application needs only
 add a single watcher - all notifications will be reported to it.
 
-@param watcher pointer to a function that will be called by the notification system.
+@param watcher pointer to a function that will be called by the notification
+system.
 @param context pointer to user defined data that will be passed to the watcher
 function with each notification.
 @return true if the watcher was successfully added.
