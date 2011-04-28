@@ -24,6 +24,5 @@ def callback(type, *args):
             i += 1
     print('%s\n' % ('-'*20,))
 
-manager.add_watcher(callback)
-manager.add_driver('/dev/ttyUSB6')
- 
+manager.addWatcher(callback)
+manager.addDriver('/dev/ttyUSB6')
