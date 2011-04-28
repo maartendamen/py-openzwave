@@ -1,28 +1,24 @@
 import openzwave
+from openzwave import PyManager
 
 options = openzwave.PyOptions()
 
 # Specify the open-zwave config path here
-options.create("py-openzwave/openzwave/config/","","")
+options.create("/home/steve/py-openzwave/openzwave/config/","","")
 options.lock()
 manager = openzwave.PyManager()
 manager.create()
 
-cbstrs=['value added','value removed','value changed','groups changed','new node','node added',
-'node removed','node protocol info','node naming','node event','polling disabled',
-'polling enabled','driver ready','driver reset','message complete','node queries complete',
-'awake nodes queried','all nodes queried']
-
+# callback order: (notificationtype, homeid, nodeid, ValueID, groupidx, event)
 def callback(type, *args):
-    print('\n%s\n[%s]: type=%d\n' % ('-'*20, cbstrs[type], type))
+    print('\n%s\n[%s]:\n' % ('-'*20, PyManager.CALLBACK_DESC[type]))
     if args:
-        print('homeId: %x' % args[0])
+        print('homeId: 0x%.8x' % args[0])
         print('nodeId: %d' % args[1])
-        i = 2
-        for arg in args[2:]:
-            print('arg[%d]: %d (0x%.2x)' % (i, arg, arg))
-            i += 1
+        print('valueID: %s' % args[2])
+        if (args[3] != 0xff): print('GroupIndex: %d' % args[3])
+        if (args[4] != 0xff): print('Event: %d' % args[4])
     print('%s\n' % ('-'*20,))
 
 manager.addWatcher(callback)
-manager.addDriver('/dev/ttyUSB6')
+manager.addDriver('/dev/keyspan-1')
