@@ -126,7 +126,7 @@ cdef extern from "Manager.h" namespace "OpenZWave":
         uint8 GetNodeGeneric(uint32 homeid, uint8 nodeid)
         uint8 GetNodeSpecific(uint32 homeid, uint8 nodeid)
         string GetNodeType(uint32 homeid, uint8 nodeid)
-        # uint32 GetNodeNeighbors(uint32 homeid, uint8 nodeid, uint8** nodeNeighbors)
+        uint32 GetNodeNeighbors(uint32 homeid, uint8 nodeid, uint8** nodeNeighbors)
         string GetNodeManufacturerName(uint32 homeid, uint8 nodeid)
         string GetNodeProductName(uint32 homeid, uint8 nodeid)
         string GetNodeName(uint32 homeid, uint8 nodeid)
@@ -142,7 +142,7 @@ cdef extern from "Manager.h" namespace "OpenZWave":
         void SetNodeOff(uint32 homeid, uint8 nodeid)
         void SetNodeLevel(uint32 homeid, uint8 nodeid, uint8 level)
         bint IsNodeInfoReceived(uint32 homeid, uint8 nodeid)
-        # bool GetNodeClassInformation(uint32 homeid, uint8 nodeid, uint8 commandClassId, string className = NULL, uint8 *classVersion = NULL)
+        bint GetNodeClassInformation(uint32 homeid, uint8 nodeid, uint8 commandClassId, string className = NULL, uint8 *classVersion = NULL)
         # // Values
         string GetValueLabel(ValueID& valueid)
         void SetValueLabel(ValueID& valueid, string value)
@@ -186,7 +186,7 @@ cdef extern from "Manager.h" namespace "OpenZWave":
         void RequestAllConfigParams(uint32 homeid, uint8 nodeid)
         # // Groups
         uint8 GetNumGroups(uint32 homeid, uint8 nodeid)
-        #uint32 GetAssociations(uint32 homeid, uint8 nodeid, uint8 groupidx, uint8** o_associations)
+        uint32 GetAssociations(uint32 homeid, uint8 nodeid, uint8 groupidx, uint8** o_associations)
         uint8 GetMaxAssociations(uint32 homeid, uint8 nodeid, uint8 groupidx)
         string GetGroupLabel(uint32 homeid, uint8 nodeid, uint8 groupidx)
         void AddAssociation(uint32 homeid, uint8 nodeid, uint8 groupidx, uint8 targetnodeid)
@@ -661,9 +661,8 @@ Causes the nodes values to be requested from the Z-Wave network.
 
 @param homeId The Home ID of the Z-Wave controller that manages the node.
 @param nodeId The ID of the node to query.
-@return True if the request was sent successfully.
         '''
-        return self.manager.RequestNodeState(homeid, nodeid)
+        self.manager.RequestNodeState(homeid, nodeid)
 
     def isNodeListeningDevice(self, homeid, nodeid):
         '''
@@ -759,7 +758,32 @@ on which of those values are specified by the node.
         cdef string c_string = self.manager.GetNodeType(homeid, nodeid)
         return c_string.c_str()
 
-    # uint32 GetNodeNeighbors(uint32 homeid, uint8 nodeid, uint8** nodeNeighbors)
+    def getNodeNeighbors(self, homeid, nodeid):
+        '''
+Retrieve a list of neighbor node ids
+
+@param homeId The Home ID of the Z-Wave controller that manages the node.
+@param nodeId The ID of the node to query.
+@return A tuple containing neighboring node IDs
+        '''
+        retval = None
+        # TODO: proper initialization of this pointer.  Underlying code creates new uint8[] at this address, but segfaults if passed in value is null.  Boy, is my C rusty.
+        cdef uint8** dbuf = <uint8**>malloc(sizeof(uint8))
+        # return value is pointer to uint8[]
+        cdef uint32 count = self.manager.GetNodeNeighbors(homeid, nodeid, dbuf)
+        cdef uint8* p
+        if count:
+            try:
+                data = set()
+                p = dbuf[0] # p is now pointing at first element of array
+                for i in range(0, count):
+                    data.add(p[0])
+                    p += 1
+                retval = tuple(data)
+            finally:
+                # TODO: caller is responsible for deleting returned array via call to delete()
+                pass
+        return retval
 
     def getNodeManufacturerName(self, homeid, nodeid):
         '''
@@ -1036,6 +1060,20 @@ Get whether the node information has been received
 @return True if the node information has been received yet
         '''
         return self.manager.IsNodeInfoReceived(homeid, nodeid)
+
+
+    def getNodeClassInformation(self, homeid, nodeid, commandClassId, className = None, classVersion = None):
+        '''
+Helper method to return whether a particular class is available in a node
+
+@param homeId The Home ID of the Z-Wave controller that manages the node.
+@param nodeId The ID of the node to query.
+@param commandClassId control class to query
+@param className (optional, default=None) specific name of class to query
+@param classVersion (optional, default=None) specific class version
+        '''
+        return self.manager.GetNodeClassInformation(homeid, nodeid, commandClassId)
+
 #
 # -----------------------------------------------------------------------------
 # Values
@@ -1043,7 +1081,6 @@ Get whether the node information has been received
 # Methods for accessing device values.  All the methods require a ValueID, which will have been provided
 # in the ValueAdded Notification callback when the the value was first discovered by OpenZWave.
 #
-#        # bool GetNodeClassInformation(uint32 homeid, uint8 nodeid, uint8 commandClassId, string className = NULL, uint8 *classVersion = NULL)
 #        string GetValueLabel(ValueID& valueid)
 #        void SetValueLabel(ValueID& valueid, string value)
 #        string GetValueUnits(ValueID& valueid)
@@ -1199,23 +1236,35 @@ AddAssociation and RemoveAssociation will be a number between 1 and 4.
         '''
         return self.manager.GetNumGroups(homeid, nodeid)
 
-#Gets the associations for a group.
-#
-#Makes a copy of the list of associated nodes in the group, and returns it in an
-#array of uint8's.  The caller is responsible for freeing the array memory with
-#a call to delete [].
-#
-#@param homeId The Home ID of the Z-Wave controller that manages the node.
-#@param nodeId The ID of the node whose associations we are interested in.
-#@param groupIdx One-based index of the group (because Z-Wave product manuals
-#use one-based group numbering).
-#@param o_associations If the number of associations returned is greater than
-#zero, o_associations will be set to point to an array containing the IDs of the
-#associated nodes.
-#@return The number of nodes in the associations array.  If zero, the array will
-#point to NULL, and does not need to be deleted.
-#@see getNumGroups, addAssociation, removeAssociation, getMaxAssociations
-#        #uint32 GetAssociations(uint32 homeid, uint8 nodeid, uint8 groupidx, uint8** o_associations)
+    def getAssociations(self, homeid, nodeid, groupidx):
+        '''
+Gets the associations for a group
+
+@param homeId The Home ID of the Z-Wave controller that manages the node.
+@param nodeId The ID of the node whose associations we are interested in.
+@param groupIdx one-based index of the group (because Z-Wave product manuals
+use one-based group numbering).
+@return A tuple containing IDs of members of the group
+@see getNumGroups, addAssociation, removeAssociation, getMaxAssociations
+        '''
+        retval = None
+        # TODO: proper initialization of this pointer.  Underlying code creates new uint8[] at this address, but segfaults if passed in value is null.  Boy, is my C rusty.
+        cdef uint8** dbuf = <uint8**>malloc(sizeof(uint8))
+        # return value is pointer to uint8[]
+        cdef uint32 count = self.manager.GetAssociations(homeid, nodeid, groupidx, dbuf)
+        cdef uint8* p
+        if count:
+            try:
+                data = set()
+                p = dbuf[0] # p is now pointing at first element of array
+                for i in range(0, count):
+                    data.add(p[0])
+                    p += 1
+                retval = tuple(data)
+            finally:
+                # TODO: caller is responsible for deleting returned array via call to delete()
+                pass
+        return retval
 
     def getMaxAssociations(self, homeid, nodeid, groupidx):
         '''
