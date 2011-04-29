@@ -4,7 +4,12 @@ cdef extern from "<string>" namespace "std":
     cdef cppclass string:
         string()
         string(char *)
+        string (size_t n, char c)
         char * c_str()
+
+cdef extern from "stdlib.h":
+    void* malloc(size_t size)
+    void free(void* ptr)
 
 ctypedef unsigned int uint32
 ctypedef unsigned char uint8
@@ -261,9 +266,17 @@ cdef class PyValueId:
              PyValueId.VALUE_TYPES[self._type], self._id)
 
 cdef void do_callback(uint8 notificationtype, void* context, uint32 homeid, uint8 nodeid, uint8 groupidx, uint8 event, ValueID valueid):
+    cdef Manager *manager = Get()
+    #cdef string mystring = string(1024,0x00)
+    cdef string mystring
+    manager.GetValueAsString(valueid, &mystring)
+    # TODO: someone help me out here - getting an "invalid conversion from ‘const char*’ to ‘char*’" message unless I cast this as void*...
+    cdef void *mydata = <void *>mystring.c_str()
+    itemValue = <char *>mydata
+
     vid = PyValueId(homeid, nodeid, <int>valueid.GetGenre(), valueid.GetCommandClassId(), valueid.GetInstance(),
                     valueid.GetIndex(), <int>valueid.GetType(), valueid.GetId())
-    (<object>context)(notificationtype, homeid, nodeid, vid, groupidx, event)
+    (<object>context)(notificationtype, homeid, nodeid, vid, groupidx, event, itemValue)
 
 cdef void callback(const_notification _notification, void* _context) with gil:
     cdef Notification* notification = <Notification*>_notification
@@ -650,7 +663,7 @@ Causes the nodes values to be requested from the Z-Wave network.
 @param nodeId The ID of the node to query.
 @return True if the request was sent successfully.
         '''
-        self.manager.RequestNodeState(homeid, nodeid)
+        return self.manager.RequestNodeState(homeid, nodeid)
 
     def isNodeListeningDevice(self, homeid, nodeid):
         '''
