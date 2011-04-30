@@ -267,7 +267,6 @@ cdef class PyValueId:
 
 cdef void do_callback(uint8 notificationtype, void* context, uint32 homeid, uint8 nodeid, uint8 groupidx, uint8 event, ValueID valueid):
     cdef Manager *manager = Get()
-    #cdef string mystring = string(1024,0x00)
     cdef string mystring
     manager.GetValueAsString(valueid, &mystring)
     # TODO: someone help me out here - getting an "invalid conversion from ‘const char*’ to ‘char*’" message unless I cast this as void*...
@@ -1099,7 +1098,7 @@ Helper method to return whether a particular class is available in a node
 #        bint GetValueAsString(ValueID& valueid, string* o_value)
 #        bint GetValueListSelection(ValueID& valueid, string* o_value)
 #        bint GetValueListSelection(ValueID& valueid, uint32* o_value)
-#        #bint GetValueListItems(ValueID& valueid, vector<string>* o_value)
+#        bint GetValueListItems(ValueID& valueid, vector<string>* o_value)
 #        bint SetValue(ValueID& valueid, uint8 value)
 #        bint SetValue(ValueID& valueid, float value)
 #        bint SetValue(ValueID& valueid, uint32 value)
@@ -1108,7 +1107,6 @@ Helper method to return whether a particular class is available in a node
 #        bint SetValueListSelection(ValueID& valueid, string selecteditem)
 #        bint PressButton(ValueID& valueid)
 #        bint ReleaseButton(ValueID& valueid)
-#        uint8 GetNumSwitchPoints(ValueID& valueid)
 #
 # -----------------------------------------------------------------------------
 # Climate Control Schedules
@@ -1128,6 +1126,7 @@ Helper method to return whether a particular class is available in a node
 #        bint RemoveSwitchPoint(ValueID& valueid, uint8 hours, uint8 minutes)
 #        bint ClearSwitchPoints(ValueID& valueid)
 #        bint GetSwitchPoint(ValueID& valueid, uint8 idx, uint8* o_hours, uint8* o_minutes, uint8* o_setback)
+#        uint8 GetNumSwitchPoints(ValueID& valueid)
 #
 # -----------------------------------------------------------------------------
 # SwitchAll
