@@ -267,15 +267,23 @@ cdef class PyValueId:
 
 cdef void do_callback(uint8 notificationtype, void* context, uint32 homeid, uint8 nodeid, uint8 groupidx, uint8 event, ValueID valueid):
     cdef Manager *manager = Get()
-    cdef string mystring
-    manager.GetValueAsString(valueid, &mystring)
+    cdef string value
+    cdef string label
+    cdef string units
+    manager.GetValueAsString(valueid, &value)
+    label = manager.GetValueLabel(valueid)
+    units = manager.GetValueUnits(valueid)
     # TODO: someone help me out here - getting an "invalid conversion from ‘const char*’ to ‘char*’" message unless I cast this as void*...
-    cdef void *mydata = <void *>mystring.c_str()
-    itemValue = <char *>mydata
-
+    cdef void *pvalue = <void *>value.c_str()
+    cdef void *plabel = <void *>label.c_str()
+    cdef void *punits = <void *>units.c_str()
+    itemValue = <char *>pvalue
+    itemLabel = <char *>plabel
+    itemUnits = <char *>punits
     vid = PyValueId(homeid, nodeid, <int>valueid.GetGenre(), valueid.GetCommandClassId(), valueid.GetInstance(),
-                    valueid.GetIndex(), <int>valueid.GetType(), valueid.GetId())
-    (<object>context)(notificationtype, homeid, nodeid, vid, groupidx, event, itemValue)
+                valueid.GetIndex(), <int>valueid.GetType(), valueid.GetId())
+    (<object>context)(notificationtype, homeid, nodeid, vid, groupidx, event, itemValue, itemLabel, itemUnits)
+
 
 cdef void callback(const_notification _notification, void* _context) with gil:
     cdef Notification* notification = <Notification*>_notification

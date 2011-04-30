@@ -19,6 +19,8 @@ def callback(type, *args):
         if (args[3] != 0xff): print('GroupIndex: %d' % args[3])
         if (args[4] != 0xff): print('Event: %d' % args[4])
         if (args[5]): print('Value: %s' % str(args[5]))
+        if (args[6]): print('Label: %s' % args[6])
+        if (args[7]): print('Units: %s' % args[7])
     print('%s\n' % ('-'*20,))
 
 manager.addWatcher(callback)
