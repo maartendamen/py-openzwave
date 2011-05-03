@@ -26,3 +26,15 @@ I (drewp) still don't know the workflow for adding new devices. For
 that I used https://code.google.com/p/openzwave-control-panel/ which
 does have an 'add device' operation.
 
+----------------------------
+Adding devices
+
+from the ozcp code, 
+
+          setAdminFunction("Add Device");
+          setAdminState(
+                   Manager::Get()->BeginControllerCommand(homeId,
+                                   Driver::ControllerCommand_AddDevice,
+                                   web_controller_update, this, true));
+then it waits for
+  case Driver::ControllerState_Completed:
