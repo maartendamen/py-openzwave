@@ -212,87 +212,104 @@ cdef class PyOptions:
     def lock(self):
         return self.options.Lock()
 
-cdef class PyValueId:
-    VALUE_GENRES = ('Basic', 'User', 'Config', 'System', 'Count')
-    VALUE_TYPES = ('Bool','Byte','Decimal','Int','List','Schedule','Short','String','Button')
+class EnumWithDoc(str):
+    def setDoc(self, doc):
+        self.__doc__ = doc
+        return self
 
-    cdef uint32 _homeid
-    cdef uint8 _nodeid
-    cdef uint8 _genre
-    cdef uint8 _commandclassid
-    cdef uint8 _instance
-    cdef uint8 _index
-    cdef uint8 _type
-    cdef uint32 _id
+PyNotifications = [
+    EnumWithDoc('ValueAdded').setDoc("A new node value has been added to OpenZWave's list. These notifications occur after a node has been discovered, and details of its command classes have been received.  Each command class may generate one or more values depending on the complexity of the item being represented."),
+    EnumWithDoc('ValueRemoved').setDoc(
+                         "A node value has been removed from OpenZWave's list.  This only occurs when a node is removed."),
+    EnumWithDoc('ValueChanged').setDoc(
+                         "A node value has been updated from the Z-Wave network."),
+    EnumWithDoc('Group').setDoc(
+                         "The associations for the node have changed. The application should rebuild any group information it holds about the node."),
+    EnumWithDoc('NodeNew').setDoc(
+                         "A new node has been found (not already stored in zwcfg*.xml file)"),
+    EnumWithDoc('NodeAdded').setDoc(
+                         "A new node has been added to OpenZWave's list.  This may be due to a device being added to the Z-Wave network, or because the application is initializing itself."),
+    EnumWithDoc('NodeRemoved').setDoc(
+                         "A node has been removed from OpenZWave's list.  This may be due to a device being removed from the Z-Wave network, or because the application is closing."),
+    EnumWithDoc('NodeProtocolInfo').setDoc(
+                         "Basic node information has been receievd, such as whether the node is a listening device, a routing device and its baud rate and basic, generic and specific types. It is after this notification that you can call Manager::GetNodeType to obtain a label containing the device description."),
+    EnumWithDoc('NodeNaming').setDoc(
+                         "One of the node names has changed (name, manufacturer, product)."),
+    EnumWithDoc('NodeEvent').setDoc(
+                         "A node has triggered an event.  This is commonly caused when a node sends a Basic_Set command to the controller.  The event value is stored in the notification."),
+    EnumWithDoc('PollingDisabled').setDoc(
+                         "Polling of a node has been successfully turned off by a call to Manager::DisablePoll"),
+    EnumWithDoc('PollingEnabled').setDoc(
+                         "Polling of a node has been successfully turned on by a call to Manager::EnablePoll"),
+    EnumWithDoc('DriverReady').setDoc(
+                         "A driver for a PC Z-Wave controller has been added and is ready to use.  The notification will contain the controller's Home ID, which is needed to call most of the Manager methods."),
+    EnumWithDoc('DriverReset').setDoc(
+                         "All nodes and values for this driver have been removed.  This is sent instead of potentially hundreds of individual node and value notifications."),
+    EnumWithDoc('MsgComplete').setDoc(
+                         "The last message that was sent is now complete."),
+    EnumWithDoc('NodeQueriesComplete').setDoc(
+                         "The initialisation queries on a node have been completed."),
+    EnumWithDoc('AwakeNodesQueried').setDoc(
+                         "All awake nodes have been queried, so client application can expected complete data for these nodes."),
+    EnumWithDoc('AllNodesQueried').setDoc(
+                         "All nodes have been queried, so client application can expected complete data."),
+    ]
 
-    def __init__(self, homeid, nodeid, genre, commandclassid, instance, index, type, id):
-        self._homeid = homeid
-        self._nodeid = nodeid
-        self._genre = genre
-        self._commandclassid = commandclassid
-        self._instance = instance
-        self._index = index
-        self._type = type
-        self._id = id
+PyGenres = [
+    EnumWithDoc('Basic').setDoc(  "The 'level' as controlled by basic commands.  Usually duplicated by another command class."),
+    EnumWithDoc('User').setDoc(   "Basic values an ordinary user would be interested in."),
+    EnumWithDoc('Config').setDoc( "Device-specific configuration parameters.  These cannot be automatically discovered via Z-Wave, and are usually described in the user manual instead."),
+    EnumWithDoc('System').setDoc( "Values of significance only to users who understand the Z-Wave protocol"),
+    ]
 
-    def getHomeId(self):
-         return self._homeid
+PyValueTypes = [
+    EnumWithDoc('Bool').setDoc(     "Boolean, true or false"),
+    EnumWithDoc('Byte').setDoc(     "8-bit unsigned value"),
+    EnumWithDoc('Decimal').setDoc(  "Represents a non-integer value as a string, to avoid floating point accuracy issues."),
+    EnumWithDoc('Int').setDoc(      "32-bit signed value"),
+    EnumWithDoc('List').setDoc(     "List from which one item can be selected"),
+    EnumWithDoc('Schedule').setDoc( "Complex type used with the Climate Control Schedule command class"),
+    EnumWithDoc('Short').setDoc(    "16-bit signed value"),
+    EnumWithDoc('String').setDoc(   "Text string"),
+    EnumWithDoc('Button').setDoc(   "A write-only value that is the equivalent of pressing a button to send a command to a device"),
+    ]
 
-    def getNodeId(self):
-        return self._nodeid
-
-    def getGenre(self):
-        return self._genre
-
-    def getCommandClassId(self):
-        return self._commandclassid
-
-    def getInstance(self):
-        return self._instance
-
-    def getIndex(self):
-        return self._index
-
-    def getType(self):
-        return self._type
-
-    def getId(self):
-        return self._id
-
-    def __str__(self):
-        return 'HomeID: [0x%0.8x] NodeID: [%d] Genre: [%s] CommandClass: [%s] Instance: [%d] Index: [%d] Type: [%s] Id: [0x%0.8x]' % \
-            (self._homeid, self._nodeid, PyValueId.VALUE_GENRES[self._genre],
-             PyManager.COMMAND_CLASS_DESC[self._commandclassid], self._instance, self._index,
-             PyValueId.VALUE_TYPES[self._type], self._id)
-
-cdef void do_callback(uint8 notificationtype, void* context, uint32 homeid, uint8 nodeid, uint8 groupidx, uint8 event, ValueID valueid):
-    cdef Manager *manager = Get()
+cdef addValueId(ValueID v, n):
     cdef string value
     cdef string label
     cdef string units
-    manager.GetValueAsString(valueid, &value)
-    label = manager.GetValueLabel(valueid)
-    units = manager.GetValueUnits(valueid)
-    # TODO: someone help me out here - getting an "invalid conversion from ‘const char*’ to ‘char*’" message unless I cast this as void*...
-    cdef void *pvalue = <void *>value.c_str()
-    cdef void *plabel = <void *>label.c_str()
-    cdef void *punits = <void *>units.c_str()
-    itemValue = <char *>pvalue
-    itemLabel = <char *>plabel
-    itemUnits = <char *>punits
-    vid = PyValueId(homeid, nodeid, <int>valueid.GetGenre(), valueid.GetCommandClassId(), valueid.GetInstance(),
-                valueid.GetIndex(), <int>valueid.GetType(), valueid.GetId())
-    (<object>context)(notificationtype, homeid, nodeid, vid, groupidx, event, itemValue, itemLabel, itemUnits)
-
+    cdef Manager *manager = Get()
+    manager.GetValueAsString(v, &value)
+    label = manager.GetValueLabel(v)
+    units = manager.GetValueUnits(v)
+    n['valueId'] = {'homeId' : v.GetHomeId(),
+                    'nodeId' : v.GetNodeId(),
+                    'commandClass' : PyManager.COMMAND_CLASS_DESC[v.GetCommandClassId()],
+                    'instance' : v.GetInstance(),
+                    'index' : v.GetIndex(),
+                    'id' : v.GetId(),
+                    'genre' : PyGenres[v.GetGenre()],
+                    'type' : PyValueTypes[v.GetType()],
+                    'value' : value.c_str(),
+                    'label' : label.c_str(),
+                    'units' : units.c_str(),
+                    }   
 
 cdef void callback(const_notification _notification, void* _context) with gil:
     cdef Notification* notification = <Notification*>_notification
-    type = notification.GetType()
-    homeid = notification.GetHomeId()
-    nodeid = notification.GetNodeId()
-    groupIdx = notification.GetGroupIdx() if type == Type_Group else 0xff
-    event = notification.GetEvent() if type == Type_NodeEvent else 0xff
-    do_callback(type, _context, homeid, nodeid, groupIdx, event, notification.GetValueID())
+
+    n = {'type' : PyNotifications[notification.GetType()],
+         'homeId' : notification.GetHomeId(),
+         'nodeId' : notification.GetNodeId(),
+         }
+    if n['type'] == Type_Group:
+        n['groupIdx'] = notification.GetGroupIdx()
+    if n['type'] == Type_NodeEvent:
+        n['event'] = notification.GetEvent()
+
+    addValueId(notification.GetValueID(), n)
+
+    (<object>_context)(n)
 
 
 cdef class PyManager:
@@ -433,6 +450,7 @@ sleeping) have been polled, an "AllNodesQueried" notification is sent.]
                      'awake nodes queried','all nodes queried')
 
     cdef Manager *manager
+    cdef object _watcherCallback
 
     def create(self):
         '''
@@ -1357,25 +1375,11 @@ add a single watcher - all notifications will be reported to it.
 
 @param watcher pointer to a function that will be called by the notification
 system.
-@param context pointer to user defined data that will be passed to the watcher
-function with each notification.
-@return true if the watcher was successfully added.
 @see removeWatcher, notification
         '''
-        return self.manager.AddWatcher(callback, <void*>pythonfunc)
-
-    def removeWatcher(self, pythonfunc):
-        '''
-Remove a notification watcher.
-
-@param watcher pointer to a function that must match that passed to a previous
-call to AddWatcher
-@param context pointer to user defined data that must match the one passed in
-that same previous call to AddWatcher.
-@return true if the watcher was successfully removed.
-@see AddWatcher, Notification
-        '''
-        return self.manager.RemoveWatcher(callback, <void*>pythonfunc)
+        self._watcherCallback = pythonfunc # need to keep a reference to this
+        if not self.manager.AddWatcher(callback, <void*>pythonfunc):
+            raise ValueError("call to AddWatcher failed")
 #
 # -----------------------------------------------------------------------------
 # Controller commands
