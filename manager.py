@@ -7,7 +7,7 @@ from louie import dispatcher
 class Manager(object):
     def __init__(self, device='/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_D-if00-port0', configDir="openzwave/config/"):
         """
-        this blocks until the homeId is known
+        calls will fail until the homeid is known. You may have to retry them.
         """
         self.options = openzwave.PyOptions()
 
@@ -34,6 +34,9 @@ class Manager(object):
         dispatcher.send(n['type'], **n['valueId'])
 
     def getNodes(self):
+        # there is a point during startup that this will return many
+        # wrong nodes, but then it settles down to the right
+        # number. I'm not sure how to filter out that bad window
         base = self.manager.getControllerNodeId(self.homeId)
         return [Node._init(self, i) for i in
                 self.manager.getNodeNeighbors(self.homeId, base)]
