@@ -293,18 +293,19 @@ cdef addValueId(ValueID v, n):
                     'value' : value.c_str(),
                     'label' : label.c_str(),
                     'units' : units.c_str(),
+                    'readOnly': manager.IsValueReadOnly(v),
                     }   
 
 cdef void callback(const_notification _notification, void* _context) with gil:
     cdef Notification* notification = <Notification*>_notification
 
-    n = {'type' : PyNotifications[notification.GetType()],
+    n = {'notificationType' : PyNotifications[notification.GetType()],
          'homeId' : notification.GetHomeId(),
          'nodeId' : notification.GetNodeId(),
          }
-    if n['type'] == Type_Group:
+    if n['notificationType'] == Type_Group:
         n['groupIdx'] = notification.GetGroupIdx()
-    if n['type'] == Type_NodeEvent:
+    if n['notificationType'] == Type_NodeEvent:
         n['event'] = notification.GetEvent()
 
     addValueId(notification.GetValueID(), n)
@@ -1344,7 +1345,7 @@ association group.
 Removes a node from an association group.
 
 Due to the possibility of a device being asleep, the command is assumed to
-suceeed, and the association data held in this class is updated directly.  This
+succeed, and the association data held in this class is updated directly.  This
 will be reverted by a future Association message from the device if the Z-Wave
 message actually failed to get through.   Notification callbacks will be sent
 in both cases.
