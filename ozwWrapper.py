@@ -62,7 +62,6 @@ class ZWaveNode:
         self._manufacturer = None
         self._product = None
         self._productType = None
-        self._nodeType = None
         self._groups = list()
 
         # decorator?
@@ -234,8 +233,7 @@ class ZWaveWrapper:
         node._location = self._manager.getNodeLocation(node._homeId, node._nodeId)
         node._manufacturer = NamedPair(id=self._manager.getNodeManufacturerId(node._homeId, node._nodeId), name=self._manager.getNodeManufacturerName(node._homeId, node._nodeId))
         node._product = NamedPair(id=self._manager.getNodeProductId(node._homeId, node._nodeId), name=self._manager.getNodeProductName(node._homeId, node._nodeId))
-        node._productType = self._manager.getNodeProductType(node._homeId, node._nodeId)
-        node._nodeType = self._manager.getNodeType(node._homeId, node._nodeId)
+        node._productType = NamedPair(id=self._manager.getNodeProductType(node._homeId, node._nodeId), name=self._manager.getNodeType(node._homeId, node._nodeId))
         node._nodeInfo = NodeInfo(
             generic = self._manager.getNodeGeneric(node._homeId, node._nodeId),
             basic = self._manager.getNodeBasic(node._homeId, node._nodeId),
