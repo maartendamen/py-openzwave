@@ -22,7 +22,7 @@ class ZWaveCommander:
         self._screen = stdscr
         self._version = '0.1 Beta 1'
         self._listtop = 0
-        self._listitem = 0
+        self._listindex = 0
         self._listcount = 0
         self._stop = threading.Event()
         self._keys = {
@@ -208,10 +208,11 @@ class ZWaveCommander:
         self._updateSystemInfo()
 
     def _redrawAll(self):
-        # TODO: re-build and draw entire screen
         self._clearDialog()
         self._updateSystemInfo()
         self._updateDeviceList()
+        self._updateColumnHeaders()
+        self._updateDeviceDetail()
 
     def _notifySystemReady(self):
         self._log.info('OpenZWave Initialization Complete.')
@@ -223,7 +224,7 @@ class ZWaveCommander:
         self._addDialogText(2, 'OpenZWave is querying associated devices')
         self._addDialogText(3,'Node {0} is now ready'.format(nodeId))
         self._addDialogProgress(5, self._readyNodeCount, self._wrapper.nodeCount)
-        #self._updateDeviceList() node's not fully populated here
+        self._updateDeviceList()
 
     def _notifyValueChanged(self, signal, **kw):
         pass
@@ -267,9 +268,10 @@ class ZWaveCommander:
         self._screen.refresh()
 
     def _updateDialog(self):
-        self._screen.refresh()
-        dc = self._dialogcoords
-        self._dialogpad.refresh(0,0,dc.sminrow, dc.smincol, dc.smaxrow, dc.smaxcol)
+        if self._dialogpad:
+            self._screen.refresh()
+            dc = self._dialogcoords
+            self._dialogpad.refresh(0,0,dc.sminrow, dc.smincol, dc.smaxrow, dc.smaxcol)
 
     def _addDialogText(self, row, text, align='^'):
         self._dialogpad.addstr(row, 1, '{0:{aln}{wid}}'.format(text, aln=align, wid=self._dialogpad.getmaxyx()[1] - 2))
@@ -287,7 +289,7 @@ class ZWaveCommander:
         self._dialogpad.addstr(row, lh, ' '*width, curses.color_pair(self.COLOR_NORMAL))
         self._dialogpad.addstr(row, lh, '|'*filled, curses.color_pair(self.COLOR_OK) | curses.A_BOLD)
         if showPercent:
-            pctstr = '{0:4.2%}'.format(pct)
+            pctstr = '{0:4.0%}'.format(pct)
             lh = ((dc.smaxcol - dc.smincol) / 2) - (len(pctstr) / 2)
             self._dialogpad.addstr(row, lh, pctstr, curses.color_pair(self.COLOR_NORMAL) | curses.A_BOLD)
         self._updateDialog()
@@ -333,9 +335,9 @@ class ZWaveCommander:
 
     def _switchItem(self, delta):
         if self._listMode:
-            n = self._listitem + delta
-            if n in range(0, self._listcount - 1):
-                self._listitem = n
+            n = self._listindex + delta
+            if n in range(0, self._listcount):
+                self._listindex = n
                 self._updateDeviceList() # TODO: we don't really need to redraw everything when selection changes
                 self._updateDeviceDetail()
 
@@ -371,7 +373,12 @@ class ZWaveCommander:
     def _updateSystemInfo(self):
         self._screen.addstr(0,1,'{0} on {1}'.format(self._wrapper.controllerDescription, self._config['device']), curses.color_pair(self.COLOR_NORMAL))
         self._screen.addstr(1,1,'Home ID 0x%0.8x' % self._wrapper.homeId, curses.color_pair(self.COLOR_NORMAL))
-        self._screen.addstr(2,1,'{0} Registered Nodes ({1} Sleeping)'.format(self._wrapper.nodeCount, self._wrapper.sleepingNodeCount), curses.color_pair(self.COLOR_NORMAL))
+        self._screen.move(2,1)
+        self._screen.addstr('{0} Registered Nodes'.format(self._wrapper.nodeCount), curses.color_pair(self.COLOR_NORMAL))
+        if self._wrapper.initialized:
+            sleepcount = self._wrapper.sleepingNodeCount
+            if sleepcount:
+                self._screen.addstr(' ({0} Sleeping)'.format(sleepcount),curses.color_pair(self.COLOR_NORMAL) | curses.A_DIM)
         self._rightPrint(0, '{0} Library'.format(self._wrapper.libraryTypeName))
         self._rightPrint(1, 'Version {0}'.format(self._wrapper.libraryVersion))
         self._screen.refresh()
@@ -398,25 +405,26 @@ class ZWaveCommander:
     def _updateDeviceList(self):
         # TODO: handle column sorting in list view
         self._listcount = self._wrapper.nodeCount
-        self._listpad.clear()
+        #self._listpad.clear()
         idx = 0
         for node in self._wrapper._nodes.itervalues():
-            #clr = curses.color_pair(self.COLOR_NORMAL) | curses.A_STANDOUT if i == self._listitem else curses.color_pair(self.COLOR_NORMAL)
+            clr = curses.color_pair(self.COLOR_NORMAL) | curses.A_STANDOUT if idx == self._listindex else curses.color_pair(self.COLOR_NORMAL)
             # self._colheaders=['','ID','Name','Location','Type','State','Batt','Signal']
             # TODO: add remaining columns
             # TODO: add highlight
             # TODO: for each column, ensure contents fit within width constraints
-            self._listpad.addstr(idx,0,' {0:<{w1}}{1:<{w2}}{2:<{w3}}{3:<{w4}}'.format(node.id, node.name, node.location, node.type, w1=self._colwidths[1], w2=self._colwidths[2], w3=self._colwidths[3], w4=self._colwidths[4]))
+            self._listpad.addstr(idx,0,' {0:<{w1}}{1:<{w2}}{2:<{w3}}{3:<{w4}}'.format(node.id, node.name, node.location, node.productType, w1=self._colwidths[1], w2=self._colwidths[2], w3=self._colwidths[3], w4=self._colwidths[4]), clr)
             idx += 1
 
         ctop = self._rowheights[0]
         listheight = self._rowheights[1]
-        if self._listitem - self._listtop > listheight:
-            self._listtop = self._listitem - listheight
-        elif self._listitem < self._listtop:
-            self._listtop = self._listitem
+        if self._listindex - self._listtop > listheight:
+            self._listtop = self._listindex - listheight
+        elif self._listindex < self._listtop:
+            self._listtop = self._listindex
         self._screen.refresh()
         self._listpad.refresh(self._listtop, 0, ctop, 0, ctop + listheight, self._screensize[1] - 1)
+        self._updateDialog()
 
     def _updateDeviceDetail(self):
         pass
