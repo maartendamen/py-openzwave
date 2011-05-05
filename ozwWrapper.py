@@ -57,8 +57,8 @@ class ZWaveNode:
         self._commandClasses = set()
         self._neighbors = set()
         self._values = dict()
-        self._name = None
-        self._location = None
+        self._name = ''
+        self._location = ''
         self._manufacturer = None
         self._product = None
         self._productType = None
@@ -67,7 +67,18 @@ class ZWaveNode:
     id = property(lambda self: self._nodeId)
     name = property(lambda self: self._name)
     location = property(lambda self: self._location)
-    type = property(lambda self: self._productType.name)
+    product = property(lambda self: self._product.name if self._product else '')
+    productType = property(lambda self: self._productType.name if self._productType else '')
+    lastUpdate = property(lambda self: self._lastUpdate)
+    homeId = property(lambda self: self._homeId)
+    nodeId = property(lambda self: self._nodeId)
+    capabilities = property(lambda self: self._capabilities)
+    commandClasses = property(lambda self: self._commandClasses)
+    neighbors = property(lambda self:self._neighbors)
+    values = property(lambda self:self._values)
+    manufacturer = property(lambda self: self._manufacturer.name if self._manufacturer else '')
+    groups = property(lambda self:self._groups)
+    isSleeping = property(lambda self: not 'listening' in self._capabilities)
 
         # decorator?
         #self._batteryLevel = None # if COMMAND_CLASS_BATTERY
@@ -122,14 +133,18 @@ class ZWaveWrapper:
     nodeCount = property(lambda self: len(self._nodes))
     sleepingNodeCount = property(lambda self: self._getSleepingNodeCount())
     homeId = property(lambda self: self._homeId)
-    controllerNode = property(lambda self: self._getNode(self._homeId, self._controllerNodeId))
+    controllerNode = property(lambda self: self._controller)
     libraryTypeName = property(lambda self: self._libraryTypeName)
     libraryVersion = property(lambda self: self._libraryVersion)
     initialized = property(lambda self: self._initialized)
+    nodes = property(lambda self: self._nodes)
 
     def _getSleepingNodeCount(self):
-        return 0
-        # TODO: get actual sleeping node count
+        retval = 0
+        for node in self._nodes.itervalues():
+            if node.isSleeping:
+                retval += 1
+        return retval - 1 if retval > 0 else 0
 
     def _getControllerDescription(self):
         if self._controllerNodeId:
@@ -179,6 +194,12 @@ class ZWaveWrapper:
         dispatcher.send(self.SIGNAL_DRIVER_READY, **{'homeId': self._homeId, 'nodeId': self._controllerNodeId})
 
     def _handleNodeQueryComplete(self, args):
+        node = self._getNode(self._homeId, args['nodeId'])
+        self._updateNodeCapabilities(node)
+        self._updateNodeCommandClasses(node)
+        self._updateNodeNeighbors(node)
+        self._updateNodeInfo(node)
+        self._updateNodeGroups(node)
         dispatcher.send(self.SIGNAL_NODE_READY, **{'homeId': self._homeId, 'nodeId': args['nodeId']})
 
     def _getNode(self, homeId, nodeId):
