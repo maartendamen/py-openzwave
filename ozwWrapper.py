@@ -105,7 +105,8 @@ class ZWaveWrapper:
         self._controller = None
         self._nodes = dict()
         options = openzwave.PyOptions()
-        options.create(config, '', '')
+        #options.create(config, config, '--logging false')
+        options.create(config, '', '--logging false')
         options.lock()
         self._manager = openzwave.PyManager()
         self._manager.create()
@@ -256,7 +257,6 @@ class ZWaveWrapper:
         self._log.debug('Node [%d] groups are: %s', node._nodeId, node._groups)
 
     def _handleInitializationComplete(self, args):
-        print('>> Post-processing nodes')
         controllercaps = set()
         if self._manager.isPrimaryController(self._homeId): controllercaps.add('primaryController')
         if self._manager.isStaticUpdateController(self._homeId): controllercaps.add('staticUpdateController')
