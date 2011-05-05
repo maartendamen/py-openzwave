@@ -4,22 +4,23 @@
 import curses
 import curses.panel
 import logging
-from threading import Event
 import threading
 import time
-
+from louie import dispatcher, All
+from ozwWrapper import ZWaveWrapper
 
 class ZWaveCommander:
     def __init__(self, stdscr):
         print('init')
+        self._driverInitialized = False
+        self._wrapper = None
         self._listMode = True
         self._screen = stdscr
         self._version = '0.1 Beta 1'
         self._listtop = 0
         self._listitem = 0
         self._listcount = 0
-        self._stop = Event()
-
+        self._stop = threading.Event()
         self._keys = {
             'A' : 'Add',
             'B' : 'About',
@@ -33,12 +34,17 @@ class ZWaveCommander:
             'Q' : 'Quit'
         }
 
+        self._config = {
+            'device': '/dev/keyspan-2',
+        }
+
+        # TODO: add log level to config
+        # TODO: add log enable/disable to config
+        # TODO: logging - can ozw log be redirected to file?  If so, we can add ability to view/tail log
         FORMAT='%(asctime)s\t%(levelname)s\t%(name)s\t%(message)s'
         logging.basicConfig(filename='test.log', level=logging.DEBUG, format=FORMAT)
         self._log = logging.getLogger('ZWaveCommander')
-
         self._logbar ='\n%s\n' % ('-'*60)
-        # TODO: logging - can ozw log be redirected to file?  If so, we can add ability to view/tail log
 
     def main(self):
         '''Main run loop'''
@@ -51,17 +57,19 @@ class ZWaveCommander:
         finally:
             self._shutdown()
 
-    def _delayloop(self, duration, callback):
+    def _delayloop(self, context, duration, callback):
+        self._log.debug('thread %s sleeping...', context)
         time.sleep(duration)
-        self._log.debug('timer expired, executing callback')
-        callback()
+        self._log.debug('timer %s expired, executing callback %s', context, callback)
+        if callback is not None:
+            callback()
 
     def _handleQuit(self):
         self._log.info('Stop requested')
         self._stop.set()
         
-    def _setTimer(self, duration, callback):
-        newTimer = threading.Thread(None, self._delayloop, 'cb-thread', (duration, callback), {})
+    def _setTimer(self, context, duration, callback):
+        newTimer = threading.Thread(None, self._delayloop, 'cb-thread-%s' % context, (context, duration, callback), {})
         newTimer.setDaemon(True)
         newTimer.start()
 
@@ -70,7 +78,8 @@ class ZWaveCommander:
         curses.flash()
         self._screen.addstr(self._screensize[0] - 1, 0, ' {0:{width}}'.format(text, width=self._screensize[1] - 2),
                             curses.color_pair(self.COLOR_ERROR))
-        self._setTimer(2, self._redrawMenu)
+        self._screen.refresh()
+        self._setTimer('alert', 2, self._redrawMenu)
 
     def _layoutScreen(self):
         # TODO: handle screen resize on curses.KEY_RESIZE in loop (tear down, re-calculate, and re-build)
@@ -91,8 +100,6 @@ class ZWaveCommander:
         # "min" columns expand evenly to fit remaining space
 
         self._screen.clear()
-        #self._screen.border(0)
-        
         self._log.debug("Laying out screen")
         self._colwidths=[1,4,10,10,20,9,7,7]
         self._colheaders=['','ID','Name','Location','Type','State','Batt','Signal']
@@ -134,11 +141,11 @@ class ZWaveCommander:
         self._log.debug('Adjusted row heights are: %s' , self._rowheights)
 
         self._listpad = curses.newpad(256,256)
-        self._updateSystemInfo()
+#        self._updateSystemInfo()
         self._updateColumnHeaders()
-        self._updateDeviceList()
-        self._updateDeviceDetail()
-        self._updateMenu()
+#        self._updateDeviceList()
+#        self._updateDeviceDetail()
+#        self._updateMenu()
 
     def _initCurses(self, stdscr):
         '''Configure ncurses application-specific environment (ncurses has already been initialized)'''
@@ -184,10 +191,47 @@ class ZWaveCommander:
         # window.getstr: read string
 
     def _checkConfig(self):
+        # TODO: check if configuration exists and is valid.  If not, then go directly to handleSetup().  Loop until user cancels or enters valid config.
+        pass
+
+    def _handleSetup(self):
+        self._alert('handleSetup not yet implemented')
+
+    def _checkIfInitialized(self):
+        if not self._driverInitialized:
+            msg = 'Unable to initialize driver - check configuration'
+            self._alert(msg)
+            self._log.warning(msg)
+            self._handleSetup()
+        else:
+            self._log.info('OpenZWave initialized successfully.')
+
+    def _notifyDriverReady(self, homeId):
+        # TODO: use correct accessor
+        self._log.info('OpenZWave Driver is Ready; homeid is %0.8x.  %d nodes were found.', homeId, len(self._wrapper._nodes))
+        self._driverInitialized = True
+        self._updateSystemInfo()
+
+    def _notifySystemReady(self):
+        self._log.info('OpenZWave Initialization Complete.')
+        self._alert('OpenZWave Initialization Complete.')
+
+    def _notifyNodeReady(self, nodeId):
+        self._log.info('Node %d is ready.', nodeId)
+        self._alert('Node %d is ready.' % nodeId)
+
+    def _notifyValueChanged(self, signal, **kw):
         pass
 
     def _checkInterface(self):
-        pass
+        # TODO: exception handling?
+        dispatcher.connect(self._notifyDriverReady, ZWaveWrapper.SIGNAL_DRIVER_READY)
+        dispatcher.connect(self._notifySystemReady, ZWaveWrapper.SIGNAL_SYSTEM_READY)
+        dispatcher.connect(self._notifyNodeReady, ZWaveWrapper.SIGNAL_NODE_READY)
+        dispatcher.connect(self._notifyValueChanged, ZWaveWrapper.SIGNAL_VALUE_CHANGED)
+        self._log.info('Initializing OpenZWave via wrapper')
+        self._wrapper = ZWaveWrapper(device=self._config['device'], config='openzwave/config/', log=None)
+        self._setTimer('initCheck', 5, self._checkIfInitialized())
 
     def _runLoop(self):
         while not self._stop.isSet():
@@ -250,10 +294,9 @@ class ZWaveCommander:
         self._screen.addstr(row, self._screensize[1] - len(data), data, attrs)
 
     def _updateSystemInfo(self):
-        screen = self._screen
-        screen.addstr(0,1,'HomeSeer Z-Troller on /dev/keyspan2', curses.color_pair(self.COLOR_NORMAL))
-        screen.addstr(1,1,'Home ID 0x003d8522', curses.color_pair(self.COLOR_NORMAL))
-        screen.addstr(2,1,'7 Registered Nodes (2 Sleeping) ', curses.color_pair(self.COLOR_NORMAL))
+        self._screen.addstr(0,1,'HomeSeer Z-Troller on /dev/keyspan2', curses.color_pair(self.COLOR_NORMAL))
+        self._screen.addstr(1,1,'Home ID 0x003d8522', curses.color_pair(self.COLOR_NORMAL))
+        self._screen.addstr(2,1,'7 Registered Nodes (2 Sleeping) ', curses.color_pair(self.COLOR_NORMAL))
         self._rightPrint(0, 'Installer Library')
         self._rightPrint(1, 'Version Z-Wave 2.78')
 
