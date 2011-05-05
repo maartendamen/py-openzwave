@@ -64,6 +64,11 @@ class ZWaveNode:
         self._productType = None
         self._groups = list()
 
+    id = property(lambda self: self._nodeId)
+    name = property(lambda self: self._name)
+    location = property(lambda self: self._location)
+    type = property(lambda self: self._productType.name)
+
         # decorator?
         #self._batteryLevel = None # if COMMAND_CLASS_BATTERY
         #self._level = None # if COMMAND_CLASS_SWITCH_MULTILEVEL - maybe state? off - ramped - on?
@@ -90,6 +95,7 @@ class ZWaveWrapper:
         be required in order to support more complex ZWave deployments.
     '''
     SIGNAL_DRIVER_READY = 'driverReady'
+    SIGNAL_NODE_ADDED = 'nodeAdded'
     SIGNAL_NODE_READY = 'nodeReady'
     SIGNAL_SYSTEM_READY = 'systemReady'
     SIGNAL_VALUE_CHANGED = 'valueChanged'
@@ -105,7 +111,6 @@ class ZWaveWrapper:
         self._controller = None
         self._nodes = dict()
         options = openzwave.PyOptions()
-        #options.create(config, config, '--logging false')
         options.create(config, '', '--logging false')
         options.lock()
         self._manager = openzwave.PyManager()
@@ -113,6 +118,26 @@ class ZWaveWrapper:
         self._manager.addWatcher(self.zwcallback)
         self._manager.addDriver(device)
 
+    controllerDescription = property(lambda self: self._getControllerDescription())
+    nodeCount = property(lambda self: len(self._nodes))
+    sleepingNodeCount = property(lambda self: self._getSleepingNodeCount())
+    homeId = property(lambda self: self._homeId)
+    controllerNode = property(lambda self: self._getNode(self._homeId, self._controllerNodeId))
+    libraryTypeName = property(lambda self: self._libraryTypeName)
+    libraryVersion = property(lambda self: self._libraryVersion)
+    initialized = property(lambda self: self._initialized)
+
+    def _getSleepingNodeCount(self):
+        return 0
+        # TODO: get actual sleeping node count
+
+    def _getControllerDescription(self):
+        if self._controllerNodeId:
+            node = self._getNode(self._homeId, self._controllerNodeId)
+            if node and node._product:
+                return node._product.name
+        return 'Unknown Controller'
+    
     def zwcallback(self, args):
         '''
         Callback Handler
@@ -173,9 +198,7 @@ class ZWaveWrapper:
     def _handleNodeChanged(self, args):
         node = self._fetchNode(args['homeId'], args['nodeId'])
         node._lastUpdate = time.time()
-        if self._initialized:
-            # TODO: louie notification if this is a new node and we are already initialized
-            pass
+        dispatcher.send(self.SIGNAL_NODE_ADDED, **{'homeId': args['homeId'], 'nodeId': args['nodeId']})
 
     def _getValueNode(self, homeId, nodeId, valueId):
         node = self._getNode(homeId, nodeId)
