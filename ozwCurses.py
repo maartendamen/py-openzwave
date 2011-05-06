@@ -25,6 +25,7 @@ class ZWaveCommander:
         self._listtop = 0
         self._listindex = 0
         self._listcount = 0
+        self._selectedNode = None
         self._stop = threading.Event()
         self._keys = {
             'A' : 'Add',
@@ -78,6 +79,32 @@ class ZWaveCommander:
         # TODO: exit confirmation dialog
         self._log.info('Stop requested')
         self._stop.set()
+
+    def _handleRefresh(self):
+        if self._selectedNode:
+            self._wrapper.refresh(self._selectedNode)
+
+    def _handleOn(self):
+        if self._selectedNode:
+            self._wrapper.setNodeOn(self._selectedNode)
+
+    def _handleOff(self):
+        if self._selectedNode:
+            self._wrapper.setNodeOff(self._selectedNode)
+
+    def _handleIncrease(self):
+        if self._selectedNode:
+            curLevel = self._selectedNode.level
+            newLevel = curLevel + 10
+            if newLevel > 99: newLevel = 99
+            self._wrapper.setNodeLevel(self._selectedNode, newLevel)
+
+    def _handleDecrease(self):
+        if self._selectedNode:
+            curLevel = self._selectedNode.level
+            newLevel = curLevel - 10
+            if newLevel < 0: newLevel = 0
+            self._wrapper.setNodeLevel(self._selectedNode, newLevel)
         
     def _setTimer(self, context, duration, callback):
         newTimer = threading.Thread(None, self._delayloop, 'cb-thread-%s' % context, (context, duration, callback), {})
@@ -161,6 +188,21 @@ class ZWaveCommander:
             self._log.debug('Curses initialized, but no colors are available')
 
         self._listpad = curses.newpad(256,256)
+        self._detailpads = {
+            'Info': curses.newpad(self._rowheights[2], self._screensize[1]),
+            'Config': curses.newpad(128, self._screensize[1]),
+            'Values': curses.newpad(128, self._screensize[1]),
+            'Classes': curses.newpad(128, self._screensize[1]),
+            'Groups': curses.newpad(self._rowheights[2], self._screensize[1]),
+            'Events': curses.newpad(256, self._screensize[1])
+        }
+        for k,v in self._detailpads.iteritems():
+            v.clear()
+            v.addstr(3,3,'{0} DETAIL PAD'.format(k))
+
+        self._detailtop = self._rowheights[0] + self._rowheights[1] + 2
+        self._detailbottom = self._detailtop + self._rowheights[2] - 3
+
         self._updateColumnHeaders()
 
     def _initCurses(self, stdscr):
@@ -233,8 +275,11 @@ class ZWaveCommander:
         self._updateDeviceList()
 
     def _notifyValueChanged(self, signal, **kw):
-        pass
-        # TODO: handle value changed notification
+        nodeId = kw['nodeId']
+        self._log.debug('Got value changed notification for node {0}'.format(nodeId))
+        # TODO: this is very heavy handed - just update appropriate elements
+        self._updateDeviceList()
+        self._updateDeviceDetail()
 
     def _initDialog(self, height, width, buttons=('OK',), caption=None):
         self._dialogpad = curses.newpad(height, width)
@@ -333,9 +378,10 @@ class ZWaveCommander:
                 try:
                     method = getattr(self, funcname)
                     method()
-                except AttributeError:
-                    msg = 'No method named %s defined!' % funcname
+                except AttributeError as ex:
+                    msg = 'No method named [%s] defined!' % funcname
                     self._log.warn('handleMnemonic: %s', msg)
+                    self._log.warn('handleMnemonic Exception Details: %s', str(ex))
                     self._alert(msg)
                 break
 
@@ -346,6 +392,9 @@ class ZWaveCommander:
                 self._listindex = n
                 self._updateDeviceList() # TODO: we don't really need to redraw everything when selection changes
                 self._updateDeviceDetail()
+        else:
+            #TODO: prev/next item for detail view
+            pass
 
     def _switchTab(self, delta):
         if self._listMode:
@@ -480,6 +529,8 @@ class ZWaveCommander:
         self._listcount = self._wrapper.nodeCount
         idx = 0
         for node in self._wrapper._nodes.itervalues():
+            if idx == self._listindex:
+                self._selectedNode = node
             self._listpad.move(idx,0)
             self._drawDeviceNodeLine(node, idx == self._listindex)
             idx += 1
@@ -494,8 +545,51 @@ class ZWaveCommander:
         self._listpad.refresh(self._listtop, 0, ctop, 0, ctop + listheight, self._screensize[1] - 1)
         self._updateDialog()
 
+    def _redrawDetailTab(self, pad):
+        self._screen.refresh()
+        pad.refresh(0, 0, self._detailtop, 0, self._detailbottom, self._screensize[1] - 1)
+
     def _updateDeviceDetail(self):
-        pass
+        self._deviceValueColumns=['id','commandClass','instance','index','type','label','value','units']
+        self._deviceValueWidths= [10,20,9,6,10,20,10,10]
+
+        pad = self._detailpads[self._detailview]
+        pad.clear()
+        # TODO: detail item scroll & highlight, keep track of selected row by detail type
+        # TODO: this block is only value items ------------
+        valuepad = self._detailpads['Values']
+        clr = curses.color_pair(self.COLOR_HEADER_HI) | curses.A_BOLD
+        valuepad.addstr(0,0,'{0:<{width}}'.format(' ', width=self._screensize[1]), clr)
+        valuepad.move(0,1)
+        for text, wid in zip(self._deviceValueColumns, self._deviceValueWidths):
+            valuepad.addstr('{0:<{width}}'.format(text.title(), width=wid), clr)
+        node = self._selectedNode
+        if node and node.values:
+            vset = list()
+            for value in node.values.itervalues():
+                if value.valueData: vset.append(value)
+            s = sorted(sorted(sorted(vset, key=lambda value: value.getValue('index')),
+                              key=lambda value: value.getValue('instance')), key=lambda value: value.getValue('id'))
+            i = 1
+            for value in s:
+                vdic = value.valueData
+                valuepad.move(i,1)
+                i += 1
+                for key, wid in zip(self._deviceValueColumns, self._deviceValueWidths):
+                    text = vdic[key] if vdic.has_key(key) else ''
+                    if key == 'commandClass' and text.startswith('COMMAND_CLASS_'):
+                        text = text[14:]
+                    drawSelected = False
+                    clr = self._getListItemColor(drawSelected)
+
+                    # TODO: value decorators (checkbox for Booleans, edit box for others)
+
+                    if key == 'value' and not vdic['readOnly']:
+                        clr = curses.color_pair(self.COLOR_ERROR)  # highlight editable values
+                    valuepad.addstr(self._fixColumn(text, wid), clr)
+        # TODO: End this block is only value items ------------
+
+        self._redrawDetailTab(pad)
 
     def _updateMenu(self):
         menurow = self._screensize[0] - 1
