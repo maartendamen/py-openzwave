@@ -149,6 +149,9 @@ class ZWaveCommander:
         self._flexcols=[2,3,4]
         self._rowheights=[5,5,10,1]
         self._flexrows=[1,2]
+        self._deviceValueColumns=['id','commandClass','instance','index','type','label','value','units']
+        self._deviceValueWidths= [10,20,9,6,10,20,10,10]
+
 
         self._sortcolumn = self._colheaders[1]
         self._detailview = self._detailheaders[0]
@@ -196,9 +199,9 @@ class ZWaveCommander:
             'Groups': curses.newpad(self._rowheights[2], self._screensize[1]),
             'Events': curses.newpad(256, self._screensize[1])
         }
-        for k,v in self._detailpads.iteritems():
-            v.clear()
-            v.addstr(3,3,'{0} DETAIL PAD'.format(k))
+        self._detailpos = dict()
+        for k in self._detailpads.iterkeys():
+            self._detailpos[k] = 0
 
         self._detailtop = self._rowheights[0] + self._rowheights[1] + 2
         self._detailbottom = self._detailtop + self._rowheights[2] - 3
@@ -550,14 +553,12 @@ class ZWaveCommander:
         pad.refresh(0, 0, self._detailtop, 0, self._detailbottom, self._screensize[1] - 1)
 
     def _updateDeviceDetail(self):
-        self._deviceValueColumns=['id','commandClass','instance','index','type','label','value','units']
-        self._deviceValueWidths= [10,20,9,6,10,20,10,10]
-
         pad = self._detailpads[self._detailview]
         pad.clear()
         # TODO: detail item scroll & highlight, keep track of selected row by detail type
         # TODO: this block is only value items ------------
         valuepad = self._detailpads['Values']
+        # Draw column header
         clr = curses.color_pair(self.COLOR_HEADER_HI) | curses.A_BOLD
         valuepad.addstr(0,0,'{0:<{width}}'.format(' ', width=self._screensize[1]), clr)
         valuepad.move(0,1)
@@ -565,29 +566,43 @@ class ZWaveCommander:
             valuepad.addstr('{0:<{width}}'.format(text.title(), width=wid), clr)
         node = self._selectedNode
         if node and node.values:
+            # Grab all items except for configuration values (they have their own tab)
             vset = list()
             for value in node.values.itervalues():
-                if value.valueData: vset.append(value)
+                if value.valueData and value.getValue('commandClass') <> 'COMMAND_CLASS_CONFIGURATION':
+                    vset.append(value)
+            # Sort the resulting set: (1) command class, (2) instance, (3) index
             s = sorted(sorted(sorted(vset, key=lambda value: value.getValue('index')),
-                              key=lambda value: value.getValue('instance')), key=lambda value: value.getValue('id'))
-            i = 1
+                              key=lambda value: value.getValue('instance')), key=lambda value: value.getValue('commandClass'))
+
+            i = 0
             for value in s:
                 vdic = value.valueData
-                valuepad.move(i,1)
+                valuepad.move(i+1,0)
+                # TODO: reset detail position on parent item change
+                drawSelected = self._detailpos['Values'] == i
+                clr = self._getListItemColor(drawSelected)
+                valuepad.addstr(' ' * self._screensize[1], clr)
+                valuepad.move(i+1,1)
                 i += 1
                 for key, wid in zip(self._deviceValueColumns, self._deviceValueWidths):
-                    text = vdic[key] if vdic.has_key(key) else ''
+                    clr = self._getListItemColor(drawSelected)
+                    text = value.getValue(key)
+                    # strip 'COMMAND_CLASS_' prefix to save some space
                     if key == 'commandClass' and text.startswith('COMMAND_CLASS_'):
                         text = text[14:]
-                    drawSelected = False
-                    clr = self._getListItemColor(drawSelected)
 
                     # TODO: value decorators (checkbox for Booleans, edit box for others)
-
-                    if key == 'value' and not vdic['readOnly']:
-                        clr = curses.color_pair(self.COLOR_ERROR)  # highlight editable values
+                    # Draw editable items differently
+                    if key == 'value' and not vdic['readOnly'] and drawSelected:
+                        clr = curses.color_pair(self.COLOR_ERROR)
                     valuepad.addstr(self._fixColumn(text, wid), clr)
+
         # TODO: End this block is only value items ------------
+
+        # TODO: config is almost identical to value, but only show COMMAND_CLASS_CONFIGURATION items
+
+        
 
         self._redrawDetailTab(pad)
 
