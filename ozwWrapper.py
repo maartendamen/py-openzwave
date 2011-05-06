@@ -36,6 +36,11 @@ class ZWaveValueNode:
         self._valueData = valueData
         self._lastUpdate = None
 
+    homeId = property(lambda self: self._homeId)
+    nodeId = property(lambda self: self._nodeId)
+    lastUpdate = property(lambda self: self._lastUpdate)
+    valueData = property(lambda self: self._valueData)
+
     def update(self, args):
         '''Update node value from callback arguments'''
         self._valueData = args['valueId']
@@ -63,6 +68,7 @@ class ZWaveNode:
         self._product = None
         self._productType = None
         self._groups = list()
+        self._sleeping = True
 
     id = property(lambda self: self._nodeId)
     name = property(lambda self: self._name)
@@ -78,7 +84,57 @@ class ZWaveNode:
     values = property(lambda self:self._values)
     manufacturer = property(lambda self: self._manufacturer.name if self._manufacturer else '')
     groups = property(lambda self:self._groups)
-    isSleeping = property(lambda self: not 'listening' in self._capabilities)
+    isSleeping = property(lambda self: self._sleeping)
+    isLocked = property(lambda self: self._getIsLocked())
+    level = property(lambda self: self._getLevel())
+    isOn = property(lambda self: self._getIsOn())
+    batteryLevel = property(lambda self: self._getBatteryLevel())
+    signalStrength = property(lambda self: self._getSignalStrength())
+
+    def _getIsLocked(self):
+        return False
+
+    def _getValuesForCommandClass(self, classId):
+        retval = list()
+        classStr = PyManager.COMMAND_CLASS_DESC[classId]
+        for value in self._values.itervalues():
+            vdic = value.valueData
+            if vdic and vdic.has_key('commandClass') and vdic['commandClass'] == classStr:
+                retval.append(value)
+        return retval
+
+    def _getLevel(self):
+        values = self._getValuesForCommandClass(0x26)  # COMMAND_CLASS_SWITCH_MULTILEVEL
+        if values:
+            for value in values:
+                vdic = value.valueData
+                if vdic and vdic.has_key('type') and vdic['type'] == 'Byte' and vdic.has_key('value'):
+                    return int(vdic['value'])
+        return 0
+
+    def _getBatteryLevel(self):
+        values = self._getValuesForCommandClass(0x80)  # COMMAND_CLASS_BATTERY
+        if values:
+            for value in values:
+                vdic = value.valueData
+                if vdic and vdic.has_key('type') and vdic['type'] == 'Byte' and vdic.has_key('value'):
+                    return int(vdic['value'])
+        return 0
+
+    def _getSignalStrength(self):
+        return 0
+
+    def _getIsOn(self):
+        values = self._getValuesForCommandClass(0x25)  # COMMAND_CLASS_SWITCH_BINARY
+        if values:
+            for value in values:
+                vdic = value.valueData
+                if vdic and vdic.has_key('type') and vdic['type'] == 'Bool' and vdic.has_key('value'):
+                    return vdic['value'] == 'True'
+        return False
+
+    def hasCommandClass(self, commandClass):
+        return commandClass in self._commandClasses
 
         # decorator?
         #self._batteryLevel = None # if COMMAND_CLASS_BATTERY
@@ -165,7 +221,9 @@ class ZWaveWrapper:
             self._handleDriverReady(args)
         elif notifyType in ('NodeAdded', 'NodeNew'):
             self._handleNodeChanged(args)
-        elif notifyType in ('ValueAdded', 'ValueChanged'):
+        elif notifyType == 'ValueAdded':
+            self._handleValueAdded(args)
+        elif notifyType == 'ValueChanged':
             self._handleValueChanged(args)
         elif notifyType == 'NodeQueriesComplete':
             self._handleNodeQueryComplete(args)
@@ -234,7 +292,7 @@ class ZWaveWrapper:
             node._values[vid] = retval
         return retval
 
-    def _handleValueChanged(self, args):
+    def _handleValueAdded(self, args):
         homeId = args['homeId']
         controllerNodeId = args['nodeId']
         valueId = args['valueId']
@@ -242,10 +300,18 @@ class ZWaveWrapper:
         node._lastUpdate = time.time()
         valueNode = self._getValueNode(homeId, controllerNodeId, valueId)
         valueNode.update(args)
-        if self._initialized:
-            #TODO: check valueid syntax - should be oK
-            dispatcher.send(self.SIGNAL_VALUE_CHANGED, **{'homeId': homeId, 'nodeId': nodeId, 'valueId': valueId})
 
+    def _handleValueChanged(self, args):
+        homeId = args['homeId']
+        controllerNodeId = args['nodeId']
+        valueId = args['valueId']
+        node = self._fetchNode(homeId, controllerNodeId)
+        node._sleeping = False
+        node._lastUpdate = time.time()
+        valueNode = self._getValueNode(homeId, controllerNodeId, valueId)
+        valueNode.update(args)
+        if self._initialized:
+            dispatcher.send(self.SIGNAL_VALUE_CHANGED, **{'homeId': homeId, 'nodeId': controllerNodeId, 'valueId': valueId})
 
     def _updateNodeCapabilities(self, node):
         '''Update node's capabilities set'''
