@@ -21,6 +21,7 @@ class ZWaveWrapperException(Exception):
     def __str__(self):
         return repr(self.value)
 
+# TODO: don't report controller node as sleeping
 # TODO: allow value identification by device/index/instance
 class ZWaveValueNode:
     '''Represents a single value for an OZW node element'''
@@ -41,10 +42,17 @@ class ZWaveValueNode:
     lastUpdate = property(lambda self: self._lastUpdate)
     valueData = property(lambda self: self._valueData)
 
+    def getValue(self, key):
+        return self.valueData[key] if self._valueData.has_key(key) else None
+    
     def update(self, args):
         '''Update node value from callback arguments'''
         self._valueData = args['valueId']
         self._lastUpdate = time.time()
+
+    def __str__(self):
+        return 'homeId: [{0}]  nodeId: [{1}]  valueData: {2}'.format(self._homeId, self._nodeId, self._valueData)
+        
 
 class ZWaveNode:
     '''Represents a single device within the Z-Wave Network'''
@@ -380,7 +388,23 @@ class ZWaveWrapper:
             self._updateNodeInfo(node)
             self._updateNodeGroups(node)
         self._initialized = True
-        dispatcher.send(self.SIGNAL_SYSTEM_READY, **{'homeId': self._homeId})
+        dispatcher.send(self.SIGNAL_SYSTEM_READY, **{'homeId': self._homeId}) 
+
+    def refresh(self, node):
+        self._log.debug('Requesting refresh for node {0}'.format(node.id))
+        self._manager.refreshNodeInfo(node.homeId, node.nodeId)
+
+    def setNodeOn(self, node):
+        self._log.debug('Requesting setNodeOn for node {0}'.format(node.id))
+        self._manager.setNodeOn(node.homeId, node.nodeId)
+
+    def setNodeOff(self, node):
+        self._log.debug('Requesting setNodeOff for node {0}'.format(node.id))
+        self._manager.setNodeOff(node.homeId, node.nodeId)
+
+    def setNodeLevel(self, node, level):
+        self._log.debug('Requesting setNodeLevel for node {0} with new level {1}'.format(node.id, level))
+        self._manager.setNodeLevel(node.homeId, node.nodeId, level)
 
 # commands:
 # - refresh node
