@@ -11,6 +11,7 @@ from louie import dispatcher, All
 from ozwWrapper import ZWaveWrapper
 
 padcoords = namedtuple('padcoords', ['sminrow','smincol','smaxrow','smaxcol'])
+colorlevels = namedtuple('colorlevels', ['error','warning'])
 
 class ZWaveCommander:
     def __init__(self, stdscr):
@@ -115,9 +116,9 @@ class ZWaveCommander:
 
         self._screen.clear()
         self._log.debug("Laying out screen")
-        self._colwidths=[1,4,10,10,20,9,7,7]
+        self._colwidths=[1,4,10,10,15,12,8,8]
         self._colheaders=['','ID','Name','Location','Type','State','Batt','Signal']
-        self._detailheaders=['Info','Config','Values','Classes','Groups']
+        self._detailheaders=['Info','Config','Values','Classes','Groups','Events']
         self._flexcols=[2,3,4]
         self._rowheights=[5,5,10,1]
         self._flexrows=[1,2]
@@ -153,6 +154,11 @@ class ZWaveCommander:
                 self._rowheights[i] += adder[0]
             self._rowheights[self._flexrows[-1]] += adder[1]
         self._log.debug('Adjusted row heights are: %s' , self._rowheights)
+
+        if curses.has_colors():
+            self._log.debug('Curses initialized: %d colors and %d color pairs available', curses.COLORS, curses.COLOR_PAIRS)
+        else:
+            self._log.debug('Curses initialized, but no colors are available')
 
         self._listpad = curses.newpad(256,256)
         self._updateColumnHeaders()
@@ -308,7 +314,7 @@ class ZWaveCommander:
 
         while not self._stop.isSet() and not self._wrapper.initialized:
             time.sleep(0.1)
-            # TODO: handle keys here...
+            # TODO: handle keys here... cancel/etc
 
     def _runLoop(self):
         while not self._stop.isSet():   
@@ -363,6 +369,7 @@ class ZWaveCommander:
         self._updateColumnHeaders()
 
     def _shutdown(self):
+        # TODO: handle orderly shutdown
         pass
 
     def _rightPrint(self, row, data, attrs=None):
@@ -402,18 +409,79 @@ class ZWaveCommander:
             wid = len(text)
             self._screen.addstr(' {0:<{width}} '.format(text, width=wid), clr)
 
+    def _fixColumn(self, text, width, align='<'):
+        retval = '{0:{aln}{wid}}'.format(text, aln=align, wid=width)
+        if len(retval) > width:
+            retval = retval[:width]
+        return retval
+        
+    def _getListItemColor(self, drawSelected):
+        return curses.color_pair(self.COLOR_NORMAL) | curses.A_STANDOUT if drawSelected \
+            else curses.color_pair(self.COLOR_NORMAL)
+
+    def _drawMiniBar(self, value, minValue, maxValue, drawWidth, drawSelected, drawPercent=False, colorLevels=None):
+        clr = self._getListItemColor(drawSelected)
+        #self._listpad.addstr(self._fixColumn('[{0}]'.format(value), drawWidth), clr)
+        pct = float(value) / float(maxValue)
+        dw = drawWidth - 2
+        filled = int(pct * float(dw))
+        fillcolor = clr
+        if not drawSelected:
+            fillcolor = curses.color_pair(self.COLOR_OK)
+            if colorLevels:
+                if pct <= colorLevels.error:
+                    fillcolor = curses.color_pair(self.COLOR_CRITICAL)
+                elif pct <= colorLevels.warning:
+                    fillcolor = curses.color_pair(self.COLOR_WARN)
+
+        self._listpad.addch('[', clr | curses.A_BOLD)
+        self._listpad.addstr('|' * filled, fillcolor)
+        self._listpad.addstr(' ' * (dw - filled), clr)
+        self._listpad.addch(']', clr | curses.A_BOLD)
+        # TODO: draw percent text if requested
+
+    def _drawNodeStatus(self, node, drawSelected):
+        clr = self._getListItemColor(drawSelected)
+        if node.isSleeping:
+            self._listpad.addstr(self._fixColumn('(sleeping)', self._colwidths[5]), clr | curses.A_LOW)
+        elif node.hasCommandClass(0x76): # lock
+            self._listpad.addstr(self._fixColumn('Locked' if node.isLocked else 'Unlocked', self._colwidths[5]), clr)
+        elif node.hasCommandClass(0x26): # multi-level switch
+            self._drawMiniBar(node.level, 0, 99, self._colwidths[5], drawSelected)
+        elif node.hasCommandClass(0x25): # binary switch
+            self._listpad.addstr(self._fixColumn('ON' if node.isOn else 'OFF', self._colwidths[5]), clr)
+        else:
+            self._listpad.addstr(self._fixColumn('OK', self._colwidths[5]), clr)
+
+    def _drawBatteryStatus(self, node, drawSelected):
+        clr = self._getListItemColor(drawSelected)
+        if node.hasCommandClass(0x80):
+            self._drawMiniBar(node.batteryLevel, 0, 100, self._colwidths[6], drawSelected, colorLevels=colorlevels(error=0.10,warning=0.40))
+        else:
+            self._listpad.addstr(self._fixColumn('', self._colwidths[6]), clr)
+
+    def _drawSignalStrength(self, node, drawSelected):
+        clr = self._getListItemColor(drawSelected)
+        self._listpad.addstr(self._fixColumn('', self._colwidths[7]), clr)
+        
+    def _drawDeviceNodeLine(self, node, drawSelected):
+        clr = self._getListItemColor(drawSelected)
+        self._listpad.addstr(' ', clr)
+        self._listpad.addstr(self._fixColumn(node.id, self._colwidths[1]), clr)
+        self._listpad.addstr(self._fixColumn(node.name, self._colwidths[2]), clr)
+        self._listpad.addstr(self._fixColumn(node.location, self._colwidths[3]), clr)
+        self._listpad.addstr(self._fixColumn(node.productType, self._colwidths[4]), clr)
+        self._drawNodeStatus(node, drawSelected)
+        self._drawBatteryStatus(node, drawSelected)
+        self._drawSignalStrength(node, drawSelected)
+
     def _updateDeviceList(self):
         # TODO: handle column sorting in list view
         self._listcount = self._wrapper.nodeCount
-        #self._listpad.clear()
         idx = 0
         for node in self._wrapper._nodes.itervalues():
-            clr = curses.color_pair(self.COLOR_NORMAL) | curses.A_STANDOUT if idx == self._listindex else curses.color_pair(self.COLOR_NORMAL)
-            # self._colheaders=['','ID','Name','Location','Type','State','Batt','Signal']
-            # TODO: add remaining columns
-            # TODO: add highlight
-            # TODO: for each column, ensure contents fit within width constraints
-            self._listpad.addstr(idx,0,' {0:<{w1}}{1:<{w2}}{2:<{w3}}{3:<{w4}}'.format(node.id, node.name, node.location, node.productType, w1=self._colwidths[1], w2=self._colwidths[2], w3=self._colwidths[3], w4=self._colwidths[4]), clr)
+            self._listpad.move(idx,0)
+            self._drawDeviceNodeLine(node, idx == self._listindex)
             idx += 1
 
         ctop = self._rowheights[0]
