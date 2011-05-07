@@ -145,7 +145,7 @@ class ZWaveCommander:
         self._log.debug("Laying out screen")
         self._colwidths=[1,4,10,10,15,12,8,8]
         self._colheaders=['','ID','Name','Location','Type','State','Batt','Signal']
-        self._detailheaders=['Info','Config','Values','Classes','Groups','Events']
+        self._detailheaders=['Info','Values','Classes','Groups','Events']
         self._flexcols=[2,3,4]
         self._rowheights=[5,5,10,1]
         self._flexrows=[1,2]
@@ -193,7 +193,6 @@ class ZWaveCommander:
         self._listpad = curses.newpad(256,256)
         self._detailpads = {
             'Info': curses.newpad(self._rowheights[2], self._screensize[1]),
-            'Config': curses.newpad(128, self._screensize[1]),
             'Values': curses.newpad(128, self._screensize[1]),
             'Classes': curses.newpad(128, self._screensize[1]),
             'Groups': curses.newpad(self._rowheights[2], self._screensize[1]),
@@ -328,25 +327,27 @@ class ZWaveCommander:
             self._dialogpad.refresh(0,0,dc.sminrow, dc.smincol, dc.smaxrow, dc.smaxcol)
 
     def _addDialogText(self, row, text, align='^'):
-        self._dialogpad.addstr(row, 1, '{0:{aln}{wid}}'.format(text, aln=align, wid=self._dialogpad.getmaxyx()[1] - 2))
-        self._updateDialog()
+        if self._dialogpad:
+            self._dialogpad.addstr(row, 1, '{0:{aln}{wid}}'.format(text, aln=align, wid=self._dialogpad.getmaxyx()[1] - 2))
+            self._updateDialog()
 
     def _addDialogProgress(self, row, current, total, showPercent=True, width=None):
-        dc = self._dialogcoords
-        if width is None:
-            width = (dc.smaxcol - dc.smincol) * 2 / 3
-        pct = float(current) / float(total)
-        filled = int(pct * float(width))
-        lh = ((dc.smaxcol - dc.smincol) / 2) - (width / 2)
-        self._dialogpad.addch(row, lh - 1, '[', curses.color_pair(self.COLOR_NORMAL) | curses.A_BOLD)
-        self._dialogpad.addch(row, lh + width, ']', curses.color_pair(self.COLOR_NORMAL) | curses.A_BOLD)
-        self._dialogpad.addstr(row, lh, ' '*width, curses.color_pair(self.COLOR_NORMAL))
-        self._dialogpad.addstr(row, lh, '|'*filled, curses.color_pair(self.COLOR_OK) | curses.A_BOLD)
-        if showPercent:
-            pctstr = '{0:4.0%}'.format(pct)
-            lh = ((dc.smaxcol - dc.smincol) / 2) - (len(pctstr) / 2)
-            self._dialogpad.addstr(row, lh, pctstr, curses.color_pair(self.COLOR_NORMAL) | curses.A_BOLD)
-        self._updateDialog()
+        if self._dialogpad:
+            dc = self._dialogcoords
+            if width is None:
+                width = (dc.smaxcol - dc.smincol) * 2 / 3
+            pct = float(current) / float(total)
+            filled = int(pct * float(width))
+            lh = ((dc.smaxcol - dc.smincol) / 2) - (width / 2)
+            self._dialogpad.addch(row, lh - 1, '[', curses.color_pair(self.COLOR_NORMAL) | curses.A_BOLD)
+            self._dialogpad.addch(row, lh + width, ']', curses.color_pair(self.COLOR_NORMAL) | curses.A_BOLD)
+            self._dialogpad.addstr(row, lh, ' '*width, curses.color_pair(self.COLOR_NORMAL))
+            self._dialogpad.addstr(row, lh, '|'*filled, curses.color_pair(self.COLOR_OK) | curses.A_BOLD)
+            if showPercent:
+                pctstr = '{0:4.0%}'.format(pct)
+                lh = ((dc.smaxcol - dc.smincol) / 2) - (len(pctstr) / 2)
+                self._dialogpad.addstr(row, lh, pctstr, curses.color_pair(self.COLOR_NORMAL) | curses.A_BOLD)
+            self._updateDialog()
 
     def _checkInterface(self):
         dispatcher.connect(self._notifyDriverReady, ZWaveWrapper.SIGNAL_DRIVER_READY)
@@ -388,16 +389,21 @@ class ZWaveCommander:
                     self._alert(msg)
                 break
 
+    def _resetDetailPos(self):
+        for p in self._detailpos.iterkeys():
+            self._detailpos[p] = 0
+
     def _switchItem(self, delta):
         if self._listMode:
             n = self._listindex + delta
             if n in range(0, self._listcount):
                 self._listindex = n
                 self._updateDeviceList() # TODO: we don't really need to redraw everything when selection changes
+                self._resetDetailPos()
                 self._updateDeviceDetail()
         else:
-            #TODO: prev/next item for detail view
-            pass
+            self._detailpos[self._detailview] += delta
+            self._updateDeviceDetail()
 
     def _switchTab(self, delta):
         if self._listMode:
@@ -473,7 +479,6 @@ class ZWaveCommander:
 
     def _drawMiniBar(self, value, minValue, maxValue, drawWidth, drawSelected, drawPercent=False, colorLevels=None):
         clr = self._getListItemColor(drawSelected)
-        #self._listpad.addstr(self._fixColumn('[{0}]'.format(value), drawWidth), clr)
         pct = float(value) / float(maxValue)
         dw = drawWidth - 2
         filled = int(pct * float(dw))
@@ -528,7 +533,6 @@ class ZWaveCommander:
         self._drawSignalStrength(node, drawSelected)
 
     def _updateDeviceList(self):
-        # TODO: handle column sorting in list view
         self._listcount = self._wrapper.nodeCount
         idx = 0
         for node in self._wrapper._nodes.itervalues():
@@ -552,38 +556,34 @@ class ZWaveCommander:
         self._screen.refresh()
         pad.refresh(0, 0, self._detailtop, 0, self._detailbottom, self._screensize[1] - 1)
 
-    def _updateDeviceDetail(self):
-        pad = self._detailpads[self._detailview]
-        pad.clear()
-        # TODO: detail item scroll & highlight, keep track of selected row by detail type
-        # TODO: this block is only value items ------------
-        valuepad = self._detailpads['Values']
+    def _updateDetail_Values(self, pad):
         # Draw column header
         clr = curses.color_pair(self.COLOR_HEADER_HI) | curses.A_BOLD
-        valuepad.addstr(0,0,'{0:<{width}}'.format(' ', width=self._screensize[1]), clr)
-        valuepad.move(0,1)
+        pad.addstr(0,0,'{0:<{width}}'.format(' ', width=self._screensize[1]), clr)
+        pad.move(0,1)
         for text, wid in zip(self._deviceValueColumns, self._deviceValueWidths):
-            valuepad.addstr('{0:<{width}}'.format(text.title(), width=wid), clr)
+            pad.addstr('{0:<{width}}'.format(text.title(), width=wid), clr)
         node = self._selectedNode
         if node and node.values:
             # Grab all items except for configuration values (they have their own tab)
             vset = list()
             for value in node.values.itervalues():
-                if value.valueData and value.getValue('commandClass') <> 'COMMAND_CLASS_CONFIGURATION':
+                if value.valueData:
                     vset.append(value)
             # Sort the resulting set: (1) command class, (2) instance, (3) index
             s = sorted(sorted(sorted(vset, key=lambda value: value.getValue('index')),
                               key=lambda value: value.getValue('instance')), key=lambda value: value.getValue('commandClass'))
 
+            if self._detailpos[self._detailview] >= len(s): self._detailpos[self._detailview]=len(s)-1
             i = 0
             for value in s:
                 vdic = value.valueData
-                valuepad.move(i+1,0)
+                pad.move(i+1,0)
                 # TODO: reset detail position on parent item change
                 drawSelected = self._detailpos['Values'] == i
                 clr = self._getListItemColor(drawSelected)
-                valuepad.addstr(' ' * self._screensize[1], clr)
-                valuepad.move(i+1,1)
+                pad.addstr(' ' * self._screensize[1], clr)
+                pad.move(i+1,1)
                 i += 1
                 for key, wid in zip(self._deviceValueColumns, self._deviceValueWidths):
                     clr = self._getListItemColor(drawSelected)
@@ -593,16 +593,76 @@ class ZWaveCommander:
                         text = text[14:]
 
                     # TODO: value decorators (checkbox for Booleans, edit box for others)
+                    # decimal: format to 2 places
+                    # bool as checkbox
+                    # byte as minibar if editable
+                    # ints need to be directly edited...
+                    # buttons... ?
+
                     # Draw editable items differently
                     if key == 'value' and not vdic['readOnly'] and drawSelected:
                         clr = curses.color_pair(self.COLOR_ERROR)
-                    valuepad.addstr(self._fixColumn(text, wid), clr)
+                    pad.addstr(self._fixColumn(text, wid), clr)
 
-        # TODO: End this block is only value items ------------
+    def _updateDetail_Info(self, pad):
+        node = self._selectedNode
+        if node:
+            #baudRate, basic, generic, specific, version, security
+            self._deviceInfoColumns=['id','name','location','capabilities','neighbors','manufacturer','product','productType']
+            if self._detailpos[self._detailview] >= len(self._deviceInfoColumns): self._detailpos[self._detailview]=len(self._deviceInfoColumns)-1
+            editableColumns=['name','location','manufacturer','product']
+            i = maxwid = 0
+            for name in self._deviceInfoColumns: maxwid = len(name) if len(name) > maxwid else maxwid
+            colwidth = maxwid + 2
+            clr = self._getListItemColor(False)
+            clr_rw = curses.color_pair(self.COLOR_ERROR)
+            clr_ro = self._getListItemColor(True)
+            clr_col = curses.color_pair(self.COLOR_OK)
+            # TODO: If editable, should be textpad
+            for column in self._deviceInfoColumns:
+                val = str(getattr(node, column))
+                pad.move(i + 1, 1)
+                pad.addstr('{0:>{width}}'.format(column.title() + ':', width=colwidth), clr_col)
+                selected = i == self._detailpos[self._detailview]
+                thisclr = clr
+                if selected: thisclr = clr_rw if column in editableColumns else clr_ro
+                i += 1
+                pad.addstr(' ')
+                pad.addstr('{0:<{width}}'.format(val, width=30), thisclr)
 
-        # TODO: config is almost identical to value, but only show COMMAND_CLASS_CONFIGURATION items
+    def _updateDetail_Classes(self, pad):
+        clr = curses.color_pair(self.COLOR_HEADER_HI) | curses.A_BOLD
+        pad.addstr(0,0,'{0:<{width}}'.format(' CommandClass', width=self._screensize[1]), clr)
+        node = self._selectedNode
+        if node:
+            if self._detailpos[self._detailview] >= len(node.commandClasses): self._detailpos[self._detailview]=len(node.commandClasses)-1
+            i = 0
+            for cc in node.commandClasses:
+                pad.addstr(i + 1, 0, ' {0:<{width}}'.format(self._wrapper.getCommandClassName(cc), width=30),
+                           self._getListItemColor(i == self._detailpos[self._detailview]))
+                i += 1
 
-        
+    def _updateDetail_Groups(self, pad):
+        pad.addstr(3,3,'Group view not yet implemented')
+
+    def _updateDetail_Events(self, pad):
+        pad.addstr(3,3,'Event view not yet implemented')
+
+    def _updateDeviceDetail(self):
+        # TODO: detail needs to be scrollable, but to accomplish that a couple of changes need to be made.  First, the detail header band needs to be moved into a static shared section (above the detail pad); second, a new dict of 'top' positions needs to be created; finally, positioning code needs to be written to correctly offset the pad.
+        pad = self._detailpads[self._detailview]
+        pad.clear()
+        if self._detailpos[self._detailview] < 0: self._detailpos[self._detailview]=0
+
+        funcname = '_updateDetail_{0}'.format(self._detailview)
+        try:
+            method = getattr(self, funcname)
+            method(pad)
+        except AttributeError as ex:
+            msg = 'No method named [%s] defined!' % funcname
+            self._log.warn('_updateDeviceDetail: %s', msg)
+            self._log.warn('_updateDeviceDetail Exception Details: %s', str(ex))
+            self._alert(msg)
 
         self._redrawDetailTab(pad)
 
@@ -619,6 +679,7 @@ class ZWaveCommander:
         self._screen.refresh()
 
 def main(stdscr):
+    # TODO: prune log file
     commander = ZWaveCommander(stdscr)
     commander.main()
     
