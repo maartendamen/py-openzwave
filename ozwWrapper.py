@@ -86,7 +86,7 @@ class ZWaveNode:
     lastUpdate = property(lambda self: self._lastUpdate)
     homeId = property(lambda self: self._homeId)
     nodeId = property(lambda self: self._nodeId)
-    capabilities = property(lambda self: self._capabilities)
+    capabilities = property(lambda self: ', '.join(self._capabilities))
     commandClasses = property(lambda self: self._commandClasses)
     neighbors = property(lambda self:self._neighbors)
     values = property(lambda self:self._values)
@@ -343,7 +343,16 @@ class ZWaveWrapper:
     def _updateNodeNeighbors(self, node):
         '''Update node's neighbor list'''
         # TODO: I believe this is an OZW bug, but sleeping nodes report very odd (and long) neighbor lists
-        node._neighbors = self._manager.getNodeNeighbors(node._homeId, node._nodeId)
+        neighborstr = str(self._manager.getNodeNeighbors(node._homeId, node._nodeId))
+        if neighborstr is None or neighborstr == 'None':
+            node._neighbors = None
+        else:
+            node._neighbors = sorted([int(i) for i in neighborstr.strip('()').split(',')])
+
+        if node.isSleeping and node._neighbors is not None and len(node._neighbors) > 10:
+            self._log.warning('Probable OZW bug: Node [%d] is sleeping and reports %d neighbors; marking neighbors as none.', node.id, len(node._neighbors))
+            node._neighbors = None
+            
         self._log.debug('Node [%d] neighbors are: %s', node._nodeId, node._neighbors)
 
     def _updateNodeInfo(self, node):
@@ -374,6 +383,10 @@ class ZWaveWrapper:
         node._groups = groups
         self._log.debug('Node [%d] groups are: %s', node._nodeId, node._groups)
 
+    def _updateNodeConfig(self, node):
+        self._log.debug('Requesting config params for node [%d]', node._nodeId)
+        self._manager.requestAllConfigParams(node._homeId, node._nodeId)
+
     def _handleInitializationComplete(self, args):
         controllercaps = set()
         if self._manager.isPrimaryController(self._homeId): controllercaps.add('primaryController')
@@ -387,8 +400,11 @@ class ZWaveWrapper:
             self._updateNodeNeighbors(node)
             self._updateNodeInfo(node)
             self._updateNodeGroups(node)
+            self._updateNodeConfig(node)
         self._initialized = True
-        dispatcher.send(self.SIGNAL_SYSTEM_READY, **{'homeId': self._homeId}) 
+        dispatcher.send(self.SIGNAL_SYSTEM_READY, **{'homeId': self._homeId})
+        self._manager.writeConfig(self._homeId)
+        # TODO: write config on shutdown as well
 
     def refresh(self, node):
         self._log.debug('Requesting refresh for node {0}'.format(node.id))
@@ -405,6 +421,15 @@ class ZWaveWrapper:
     def setNodeLevel(self, node, level):
         self._log.debug('Requesting setNodeLevel for node {0} with new level {1}'.format(node.id, level))
         self._manager.setNodeLevel(node.homeId, node.nodeId, level)
+
+    def getCommandClassName(self, commandClassCode):
+        return PyManager.COMMAND_CLASS_DESC[commandClassCode]
+
+    def getCommandClassCode(self, commandClassName):
+        for k, v in PyManager.COMMAND_CLASS_DESC.iteritems():
+            if v == commandClassName:
+                return k
+        return None
 
 # commands:
 # - refresh node
