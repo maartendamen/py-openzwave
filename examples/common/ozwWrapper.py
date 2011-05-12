@@ -4,9 +4,11 @@
 import openzwave
 from collections import namedtuple
 from openzwave import PyManager
+import thread
 import time
 from louie import dispatcher, All
 import logging
+import singleton
 
 NamedPair = namedtuple('NamedPair', ['id', 'name'])
 NodeInfo = namedtuple('NodeInfo', ['generic','basic','specific','security','version'])
@@ -127,7 +129,7 @@ class ZWaveNode:
                 vdic = value.valueData
                 if vdic and vdic.has_key('type') and vdic['type'] == 'Byte' and vdic.has_key('value'):
                     return int(vdic['value'])
-        return 0
+        return -1
 
     def _getSignalStrength(self):
         return 0
@@ -157,7 +159,7 @@ class NullHandler(logging.Handler):
     def emit(self, record):
         pass
 
-class ZWaveWrapper:
+class ZWaveWrapper(singleton.Singleton):
     '''
         The purpose of this wrapper is to eliminate some of the tedium of working with
         the underlying API, which is extremely fine-grained.
@@ -175,6 +177,8 @@ class ZWaveWrapper:
     SIGNAL_SYSTEM_READY = 'systemReady'
     SIGNAL_VALUE_CHANGED = 'valueChanged'
 
+    ignoreSubsequent = True
+
     def __init__(self, device, config, log=None):
         self._log = log
         if self._log is None:
@@ -185,6 +189,9 @@ class ZWaveWrapper:
         self._controllerNodeId = None
         self._controller = None
         self._nodes = dict()
+        self._libraryTypeName = 'Unknown'
+        self._libraryVersion = 'Unknown'
+        self._device = device
         options = openzwave.PyOptions()
         options.create(config, '', '--logging false')
         options.lock()
@@ -195,13 +202,17 @@ class ZWaveWrapper:
 
     controllerDescription = property(lambda self: self._getControllerDescription())
     nodeCount = property(lambda self: len(self._nodes))
+    nodeCountDescription = property(lambda self: self._getNodeCountDescription())
     sleepingNodeCount = property(lambda self: self._getSleepingNodeCount())
     homeId = property(lambda self: self._homeId)
     controllerNode = property(lambda self: self._controller)
+    controllerNodeId = property(lambda self: self._controllerNodeId)
+    libraryDescription = property(lambda self: self._getLibraryDescription())
     libraryTypeName = property(lambda self: self._libraryTypeName)
     libraryVersion = property(lambda self: self._libraryVersion)
     initialized = property(lambda self: self._initialized)
     nodes = property(lambda self: self._nodes)
+    device = property(lambda self: self._device)
 
     def _getSleepingNodeCount(self):
         retval = 0
@@ -209,6 +220,19 @@ class ZWaveWrapper:
             if node.isSleeping:
                 retval += 1
         return retval - 1 if retval > 0 else 0
+
+    def _getLibraryDescription(self):
+        if self._libraryTypeName and self._libraryVersion:
+            return '{0} Library Version {1}'.format(self._libraryTypeName, self._libraryVersion)
+        else:
+            return 'Unknown'
+
+    def _getNodeCountDescription(self):
+        retval = '{0} Nodes'.format(self.nodeCount)
+        sleepCount = self.sleepingNodeCount
+        if sleepCount:
+            retval = '{0} ({1} sleeping)'.format(retval, sleepCount)
+        return retval
 
     def _getControllerDescription(self):
         if self._controllerNodeId:
@@ -256,7 +280,9 @@ class ZWaveWrapper:
         self._controller = self._fetchNode(self._homeId, self._controllerNodeId)
         self._libraryVersion = self._manager.getLibraryVersion(self._homeId)
         self._libraryTypeName = self._manager.getLibraryTypeName(self._homeId)
-        self._log.debug('Driver ready.  homeId is 0x%0.8x, controller node id is %d, using %s library version %s', self._homeId, self._controllerNodeId, self._libraryTypeName, self._libraryVersion)
+        self._log.info('Driver ready.  homeId is 0x%0.8x, controller node id is %d, using %s library version %s', self._homeId, self._controllerNodeId, self._libraryTypeName, self._libraryVersion)
+        self._log.info('OpenZWave Initialization Begins.')
+        self._log.info('The initialization process could take several minutes.  Please be patient.')
         dispatcher.send(self.SIGNAL_DRIVER_READY, **{'homeId': self._homeId, 'nodeId': self._controllerNodeId})
 
     def _handleNodeQueryComplete(self, args):
@@ -266,6 +292,7 @@ class ZWaveWrapper:
         self._updateNodeNeighbors(node)
         self._updateNodeInfo(node)
         self._updateNodeGroups(node)
+        self._log.info('Z-Wave Device Node {0} is ready.'.format(node.id))
         dispatcher.send(self.SIGNAL_NODE_READY, **{'homeId': self._homeId, 'nodeId': args['nodeId']})
 
     def _getNode(self, homeId, nodeId):
@@ -402,25 +429,26 @@ class ZWaveWrapper:
             self._updateNodeGroups(node)
             self._updateNodeConfig(node)
         self._initialized = True
+        self._log.info("OpenZWave initialization is complete.  Found {0} Z-Wave Device Nodes ({1} sleeping)".format(self.nodeCount, self.sleepingNodeCount))
         dispatcher.send(self.SIGNAL_SYSTEM_READY, **{'homeId': self._homeId})
         self._manager.writeConfig(self._homeId)
         # TODO: write config on shutdown as well
 
     def refresh(self, node):
         self._log.debug('Requesting refresh for node {0}'.format(node.id))
-        self._manager.refreshNodeInfo(node.homeId, node.nodeId)
+        self._manager.refreshNodeInfo(node.homeId, node.id)
 
     def setNodeOn(self, node):
         self._log.debug('Requesting setNodeOn for node {0}'.format(node.id))
-        self._manager.setNodeOn(node.homeId, node.nodeId)
+        self._manager.setNodeOn(node.homeId, node.id)
 
     def setNodeOff(self, node):
         self._log.debug('Requesting setNodeOff for node {0}'.format(node.id))
-        self._manager.setNodeOff(node.homeId, node.nodeId)
+        self._manager.setNodeOff(node.homeId, node.id)
 
     def setNodeLevel(self, node, level):
         self._log.debug('Requesting setNodeLevel for node {0} with new level {1}'.format(node.id, level))
-        self._manager.setNodeLevel(node.homeId, node.nodeId, level)
+        self._manager.setNodeLevel(node.homeId, node.id, level)
 
     def getCommandClassName(self, commandClassCode):
         return PyManager.COMMAND_CLASS_DESC[commandClassCode]
