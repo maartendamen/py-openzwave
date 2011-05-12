@@ -8,7 +8,7 @@ import logging
 import threading
 import time
 from louie import dispatcher, All
-from ozwWrapper import ZWaveWrapper
+from common.ozwWrapper import ZWaveWrapper
 
 padcoords = namedtuple('padcoords', ['sminrow','smincol','smaxrow','smaxcol'])
 colorlevels = namedtuple('colorlevels', ['error','warning'])
@@ -358,7 +358,7 @@ class ZWaveCommander:
         self._initDialog(10,60,['Cancel'],'Progress')
         self._addDialogText(2,'Initializing OpenZWave')
         self._log.info('Initializing OpenZWave via wrapper')
-        self._wrapper = ZWaveWrapper(device=self._config['device'], config=self._config['config'], log=None)
+        self._wrapper = ZWaveWrapper.getInstance(device=self._config['device'], config=self._config['config'], log=None)
         self._setTimer('initCheck', 3, self._checkIfInitialized)
 
         while not self._stop.isSet() and not self._wrapper.initialized:
@@ -644,9 +644,15 @@ class ZWaveCommander:
 
     def _updateDetail_Groups(self, pad):
         pad.addstr(3,3,'Group view not yet implemented')
+        # groups tab:
+        # index label               maxMembers members
+        # 1     my group            4          1, 2, 4
+        # Members column is editable - enter comma-separated list?
 
     def _updateDetail_Events(self, pad):
         pad.addstr(3,3,'Event view not yet implemented')
+        # event detail tab:
+        # timestamp  commandClass  notificationType 
 
     def _updateDeviceDetail(self):
         # TODO: detail needs to be scrollable, but to accomplish that a couple of changes need to be made.  First, the detail header band needs to be moved into a static shared section (above the detail pad); second, a new dict of 'top' positions needs to be created; finally, positioning code needs to be written to correctly offset the pad.
