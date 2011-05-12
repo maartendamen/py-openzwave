@@ -46,6 +46,9 @@
                 <td align="right"><a href="{{ url_for('show_node', id=node.id) }}">{{ node.id }}</a></td>
                 <td>{{ node.name }}</td><td>{{ node.location }}</td><td>{{ node.productType }}</td>
                 <td align="center">
+                    <!-- TODO: State display for binary sensor -->
+                    <!-- TODO: State display for multilevel sensor (sparkline?) -->
+                    <!-- TODO: remove light switch, takes up too much room.  Switch to simple bulb metaphor instead. -->
                     {% if (node.hasCommandClass(37) or node.hasCommandClass(38)) and not node.isSleeping %}
                     <input class='switch' id='node_{{ node.id }}' type='checkbox' value='{{ node.isOn or node.level > 0}}' {% if node.isOn or node.level > 0 %}checked='checked'{% endif %} />
                     {% endif %}
