@@ -5,7 +5,7 @@ import openzwave
 from louie import dispatcher
 
 class Manager(object):
-    def __init__(self, device='/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_D-if00-port0', configDir="openzwave/config/"):
+    def __init__(self, device='/dev/keyspan-2', configDir="openzwave/config/"):
         """
         calls will fail until the homeid is known. You may have to retry them.
         """
