@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import logging
 
-from ozwWrapper import ZWaveWrapper
+from examples.common.ozwWrapper import ZWaveWrapper
 
 FORMAT='%(asctime)s\t%(levelname)s\t%(name)s\t%(message)s'
 logging.basicConfig(level=logging.DEBUG, format=FORMAT)
