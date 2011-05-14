@@ -15,8 +15,8 @@ LD     := $(CROSS_COMPILE)g++
 AR     := $(CROSS_COMPILE)ar rc
 RANLIB := $(CROSS_COMPILE)ranlib
 
-DEBUG_CFLAGS    := -Wall -Wno-format -g -DDEBUG -DLOG_STDERR
-RELEASE_CFLAGS  := -Wall -Wno-unknown-pragmas -Wno-format -O3
+DEBUG_CFLAGS    := -fPIC -Wall -Wno-format -g -DDEBUG -DLOG_STDERR
+RELEASE_CFLAGS  := -fPIC -Wall -Wno-unknown-pragmas -Wno-format -O3
 
 DEBUG_LDFLAGS	:= -g
 
@@ -77,4 +77,5 @@ $(LIBDIR)/openzwave.a:	$(patsubst %.cpp,%.o,$(tinyxml)) \
 			$(patsubst %.cpp,%.o,$(vclasses)) \
 			$(patsubst %.cpp,%.o,$(pform)) \
 			$(patsubst %.cpp,%.o,$(indep)) vers.o
+	mkdir -p $(LIBDIR)
 	$(AR) $@ $?
