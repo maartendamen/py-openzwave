@@ -1,4 +1,5 @@
 from cython.operator cimport dereference as deref
+from libcpp.map cimport map, pair
 
 cdef extern from "<string>" namespace "std":
     cdef cppclass string:
@@ -12,6 +13,8 @@ cdef extern from "stdlib.h":
     void free(void* ptr)
 
 ctypedef unsigned int uint32
+ctypedef int int32
+ctypedef int int16
 ctypedef unsigned char uint8
 
 cdef extern from "Options.h" namespace "OpenZWave":
@@ -163,10 +166,11 @@ cdef extern from "Manager.h" namespace "OpenZWave":
         bint GetValueListSelection(ValueID& valueid, string* o_value)
         bint GetValueListSelection(ValueID& valueid, uint32* o_value)
         #bint GetValueListItems(ValueID& valueid, vector<string>* o_value)
+        bint SetValue(ValueID& valueid, bint value)
         bint SetValue(ValueID& valueid, uint8 value)
         bint SetValue(ValueID& valueid, float value)
-        bint SetValue(ValueID& valueid, uint32 value)
-        bint SetValue(ValueID& valueid, uint32 value)
+        bint SetValue(ValueID& valueid, int32 value)
+        bint SetValue(ValueID& valueid, int16 value)
         bint SetValue(ValueID& valueid, string value)
         bint SetValueListSelection(ValueID& valueid, string selecteditem)
         bint PressButton(ValueID& valueid)
@@ -274,6 +278,8 @@ PyValueTypes = [
     EnumWithDoc('Button').setDoc(   "A write-only value that is the equivalent of pressing a button to send a command to a device"),
     ]
 
+cdef map[uint32, ValueID] values_map 
+
 cdef addValueId(ValueID v, n):
     cdef string value
     cdef string label
@@ -295,6 +301,8 @@ cdef addValueId(ValueID v, n):
                     'units' : units.c_str(),
                     'readOnly': manager.IsValueReadOnly(v),
                     }   
+    
+    values_map.insert ( pair[uint32, ValueID] (v.GetId(), v)) 
 
 cdef void callback(const_notification _notification, void* _context) with gil:
     cdef Notification* notification = <Notification*>_notification
@@ -1106,7 +1114,46 @@ Helper method to return whether a particular class is available in a node
 # -----------------------------------------------------------------------------
 # Methods for accessing device values.  All the methods require a ValueID, which will have been provided
 # in the ValueAdded Notification callback when the the value was first discovered by OpenZWave.
-#
+
+    def setValue(self, id, value):
+        '''
+Sets the value of a device valueid.
+Due to the possibility of a device being asleep, the command is assumed to suceeed, and the value
+held by the node is updated directly.  This will be reverted by a future status message from the device
+if the Z-Wave message actually failed to get through.  Notification callbacks will be sent in both cases.
+@param id the ID of a value.
+@param value the value to set
+        '''
+        cdef float type_float
+        cdef bint type_bool
+        cdef uint8 type_byte
+        cdef int32 type_int
+        cdef int16 type_short
+        cdef string type_string
+
+        if values_map.find(id) != values_map.end(): 
+            datatype = PyValueTypes[values_map.at(id).GetType()]
+            
+            if datatype == "Bool":
+                type_bool = value
+                self.manager.SetValue(values_map.at(id), type_bool)
+            elif datatype == "Byte":
+                type_byte = value
+                self.manager.SetValue(values_map.at(id), type_byte)            
+            elif datatype == "Decimal":
+                type_float = value
+                self.manager.SetValue(values_map.at(id), type_float)
+            # TODO: this gives me an "ambiguous overloaded method", I don't understand why.
+            #elif datatype == "Int":
+            #    type_int = value
+            #    self.manager.SetValue(values_map.at(id), type_int)
+            #elif datatype == "Short":
+            #    type_short = value
+            #    self.manager.SetValue(values_map.at(id), type_short)
+            elif datatype == "String":
+                type_string = string(value)
+                self.manager.SetValue(values_map.at(id), type_string)
+                
 #        string GetValueLabel(ValueID& valueid)
 #        void SetValueLabel(ValueID& valueid, string value)
 #        string GetValueUnits(ValueID& valueid)
