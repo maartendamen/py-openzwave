@@ -112,7 +112,7 @@ class dummy:
 
 @app.before_request
 def before_request():
-    g.wrapper = ZWaveWrapper.getInstance(device='/dev/keyspan-2', config='openzwave/config/', log=log)
+    g.wrapper = ZWaveWrapper.getInstance(device='/dev/keyspan-2', config='../openzwave/config/', log=log)
     #g.wrapper = dummy()
 
 @app.route('/')

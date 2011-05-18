@@ -193,7 +193,7 @@ class ZWaveWrapper(singleton.Singleton):
         self._libraryVersion = 'Unknown'
         self._device = device
         options = openzwave.PyOptions()
-        options.create(config, '', '--logging false')
+        options.create(config, '', '--logging false') 
         options.lock()
         self._manager = openzwave.PyManager()
         self._manager.create()

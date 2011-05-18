@@ -42,7 +42,7 @@ class ZWaveCommander:
 
         self._config = {
             'device': '/dev/keyspan-2',
-            'config': 'openzwave/config/',
+            'config': '../openzwave/config/',
         }
 
         # TODO: add log level to config
