@@ -264,6 +264,7 @@ class ZWaveWrapper(singleton.Singleton):
         else:
             self._log.debug('Skipping unhandled notification type [%s]', notifyType)
 
+        # TODO: Optional command classes are not being reported via wrapper! Example: Node(2)::CommandClass 0x2b (COMMAND_CLASS_SCENE_ACTIVATION) - NOT REQUIRED
         # TODO: handle event
         # TODO: handle group change
         # TODO: handle value removed
