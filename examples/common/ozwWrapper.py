@@ -375,7 +375,7 @@ class ZWaveWrapper(singleton.Singleton):
         if neighborstr is None or neighborstr == 'None':
             node._neighbors = None
         else:
-            node._neighbors = sorted([int(i) for i in neighborstr.strip('()').split(',')])
+            node._neighbors = sorted([int(i) for i in filter(None, neighborstr.strip('()').split(','))])
 
         if node.isSleeping and node._neighbors is not None and len(node._neighbors) > 10:
             self._log.warning('Probable OZW bug: Node [%d] is sleeping and reports %d neighbors; marking neighbors as none.', node.id, len(node._neighbors))
