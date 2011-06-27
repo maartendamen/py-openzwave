@@ -138,7 +138,29 @@ def list_nodes():
 @templated()
 @requires_network
 def show_node(id):
-    return dict(node=get_node(int(id)))
+    node = get_node(int(id))
+    if request.method == 'GET':
+        if 'command' in request.args:
+            qs = request.args['command']
+            levelChange = 0
+
+            if qs == 'on':
+                g.wrapper.setNodeOn(node)
+            elif qs == 'off':
+                g.wrapper.setNodeOff(node)
+            elif qs in ['dim', 'bright']:
+                if qs == 'dim': 
+                    levelChange = -10
+                elif qs == 'bright': 
+                    levelChange = 10
+                curLevel = node.level
+                print "current level: " + str(curLevel)
+                newLevel = curLevel + levelChange
+                print "new level: " + str(newLevel)
+                if (0 <= newLevel and newLevel <= 100):
+                    g.wrapper.setNodeLevel(node, newLevel)
+             
+    return dict(node=node)
 
     # TODO: command param, execute if set (and if method is put)
     # /nodes/<id>?command=on <-- validate command
