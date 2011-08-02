@@ -311,9 +311,9 @@ cdef void callback(const_notification _notification, void* _context) with gil:
          'homeId' : notification.GetHomeId(),
          'nodeId' : notification.GetNodeId(),
          }
-    if n['notificationType'] == Type_Group:
+    if notification.GetType() == Type_Group:
         n['groupIdx'] = notification.GetGroupIdx()
-    if n['notificationType'] == Type_NodeEvent:
+    if notification.GetType() == Type_NodeEvent:
         n['event'] = notification.GetEvent()
 
     addValueId(notification.GetValueID(), n)
