@@ -138,7 +138,7 @@ def list_nodes():
 @templated()
 @requires_network
 def show_node(id):
-    return dict(node=get_node(id))
+    return dict(node=get_node(int(id)))
 
     # TODO: command param, execute if set (and if method is put)
     # /nodes/<id>?command=on <-- validate command
