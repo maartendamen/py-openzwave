@@ -37,6 +37,7 @@
         {% for node in nodes %}
             <tr>
                 <td align="center">
+                    <!-- TODO: show different status icon if sensor alarmed -->
                     {% if node.isSleeping %}
                     <img width="16" height="16" src="{{ url_for('static', filename='images/sleeping.png') }}" alt="sleeping"/>
                     {% else %}
