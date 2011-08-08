@@ -242,6 +242,14 @@ class ZWaveWrapper(singleton.Singleton):
         return 'Unknown Controller'
     
     def zwcallback(self, args):
+        try:
+            return self._zwcallback(args)
+        except:
+            import sys, traceback
+            print '\n'.join(traceback.format_exception(*sys.exc_info()))
+            raise
+
+    def _zwcallback(self, args):
         '''
         Callback Handler
 
