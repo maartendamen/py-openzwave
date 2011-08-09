@@ -43,7 +43,11 @@
                 </ul>
                 <ul>
                     <li>
-                        <label for='nodes'>Node Count:</label>
+                        <label for='nodes'>Node Count:
+{% if wrapper.initialized %}
+                                <a href="nodes">View</a>
+{% endif %}
+                        </label>
                         <input class='readonly' id='nodes' readonly='readonly' type='text' value="{{ wrapper.nodeCountDescription }}"/>
                     </li>
                 </ul>

@@ -193,7 +193,7 @@ class ZWaveWrapper(singleton.Singleton):
         self._libraryVersion = 'Unknown'
         self._device = device
         options = openzwave.PyOptions()
-        options.create(config, '', '--logging false')
+        options.create(config, '', '--logging false') 
         options.lock()
         self._manager = openzwave.PyManager()
         self._manager.create()
@@ -242,6 +242,14 @@ class ZWaveWrapper(singleton.Singleton):
         return 'Unknown Controller'
     
     def zwcallback(self, args):
+        try:
+            return self._zwcallback(args)
+        except:
+            import sys, traceback
+            print '\n'.join(traceback.format_exception(*sys.exc_info()))
+            raise
+
+    def _zwcallback(self, args):
         '''
         Callback Handler
 
@@ -264,6 +272,7 @@ class ZWaveWrapper(singleton.Singleton):
         else:
             self._log.debug('Skipping unhandled notification type [%s]', notifyType)
 
+        # TODO: Optional command classes are not being reported via wrapper! Example: Node(2)::CommandClass 0x2b (COMMAND_CLASS_SCENE_ACTIVATION) - NOT REQUIRED
         # TODO: handle event
         # TODO: handle group change
         # TODO: handle value removed
@@ -370,11 +379,11 @@ class ZWaveWrapper(singleton.Singleton):
     def _updateNodeNeighbors(self, node):
         '''Update node's neighbor list'''
         # TODO: I believe this is an OZW bug, but sleeping nodes report very odd (and long) neighbor lists
-        neighborstr = str(self._manager.getNodeNeighbors(node._homeId, node._nodeId))
-        if neighborstr is None or neighborstr == 'None':
+        neighbors = self._manager.getNodeNeighbors(node._homeId, node._nodeId)
+        if neighbors is None:
             node._neighbors = None
         else:
-            node._neighbors = sorted([int(i) for i in neighborstr.strip('()').split(',')])
+            node._neighbors = sorted(neighbors)
 
         if node.isSleeping and node._neighbors is not None and len(node._neighbors) > 10:
             self._log.warning('Probable OZW bug: Node [%d] is sleeping and reports %d neighbors; marking neighbors as none.', node.id, len(node._neighbors))
