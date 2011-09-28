@@ -285,7 +285,12 @@ cdef addValueId(ValueID v, n):
     cdef string label
     cdef string units
     cdef Manager *manager = Get()
-    manager.GetValueAsString(v, &value)
+    
+    if PyValueTypes[v.GetType()] == "List":
+        manager.GetValueListSelection(v, &value)
+    else:
+        manager.GetValueAsString(v, &value)    
+    
     label = manager.GetValueLabel(v)
     units = manager.GetValueUnits(v)
     n['valueId'] = {'homeId' : v.GetHomeId(),

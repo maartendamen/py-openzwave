@@ -380,11 +380,11 @@ class ZWaveWrapper(singleton.Singleton):
     def _updateNodeNeighbors(self, node):
         '''Update node's neighbor list'''
         # TODO: I believe this is an OZW bug, but sleeping nodes report very odd (and long) neighbor lists
-        neighborstr = str(self._manager.getNodeNeighbors(node._homeId, node._nodeId))
-        if neighborstr is None or neighborstr == 'None':
+        neighbors = self._manager.getNodeNeighbors(node._homeId, node._nodeId)
+        if neighbors is None:
             node._neighbors = None
         else:
-            node._neighbors = sorted([int(i) for i in filter(None, neighborstr.strip('()').split(','))])
+            node._neighbors = sorted(neighbors)
 
         if node.isSleeping and node._neighbors is not None and len(node._neighbors) > 10:
             self._log.warning('Probable OZW bug: Node [%d] is sleeping and reports %d neighbors; marking neighbors as none.', node.id, len(node._neighbors))
