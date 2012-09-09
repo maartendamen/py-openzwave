@@ -113,10 +113,11 @@ cdef extern from "Manager.h" namespace "OpenZWave":
         string GetLibraryTypeName(uint32 homeid)
         # // Polling
         uint32 GetPollInterval()
-        void SetPollInterval(uint8 seconds)
-        bint EnablePoll(ValueID& valueId)
+        void SetPollInterval(uint32 milliseconds, bint intervalBetweenPolls)
+        bint EnablePoll(ValueID& valueId, uint8 intensity)
         bint DisablePoll(ValueID& valueId)
         bint isPolled(ValueID& valueId)
+        void SetPollIntensity(ValueID& valueId, uint8 intensity)
         # // Node Information
         bint RefreshNodeInfo(uint32 homeid, uint8 nodeid)
         void RequestNodeState(uint32 homeid, uint8 nodeid)
@@ -649,7 +650,7 @@ method.
         '''Get the time period between polls of a nodes state'''
         return self.manager.GetPollInterval()
 
-    def setPollInterval(self, seconds):
+    def setPollInterval(self, milliseconds, intervalBetweenPolls):
         '''
 Set the time period between polls of a nodes state.
 
@@ -664,7 +665,7 @@ does not have to cope with more than one poll per second).
 
 @param seconds The length of the polling interval in seconds.
         '''
-        self.manager.SetPollInterval(seconds)
+        self.manager.SetPollInterval(milliseconds, intervalBetweenPolls)
 
 #        bint EnablePoll(ValueID& valueId)
 #        bint DisablePoll(ValueID& valueId)
