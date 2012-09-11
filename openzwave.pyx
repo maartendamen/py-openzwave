@@ -36,21 +36,29 @@ cdef extern from "Notification.h" namespace "OpenZWave::Notification":
         Type_ValueAdded = 0
         Type_ValueRemoved = 1
         Type_ValueChanged = 2
-        Type_Group = 3
-        Type_NodeNew = 4
-        Type_NodeAdded = 5
-        Type_NodeRemoved = 6
-        Type_NodeProtocolInfo = 7
-        Type_NodeNaming = 8
-        Type_NodeEvent = 9
-        Type_PollingDisabled = 10
-        Type_PollingEnabled = 11
-        Type_DriverReady = 12
-        Type_DriverReset = 13
-        Type_MsgComplete = 14
-        Type_NodeQueriesComplete = 15
-        Type_AwakeNodesQueried = 16
-        Type_AllNodesQueried = 17
+        Type_ValueRefreshed = 3
+        Type_Group = 4
+        Type_NodeNew = 5
+        Type_NodeAdded = 6
+        Type_NodeRemoved = 7
+        Type_NodeProtocolInfo = 8
+        Type_NodeNaming = 9
+        Type_NodeEvent = 10
+        Type_PollingDisabled = 11
+        Type_PollingEnabled = 12
+        Type_CreateButton = 13
+        Type_DeleteButton = 14
+        Type_ButtonOn = 15
+        Type_ButtonOff = 16
+        Type_DriverReady = 17
+        Type_DriverFailed = 18
+        Type_DriverReset = 19
+        Type_MsgComplete = 20
+        Type_EssentialNodeQueriesComplete = 21
+        Type_NodeQueriesComplete = 22
+        Type_AwakeNodesQueried = 23
+        Type_AllNodesQueried = 24
+        Type_Error = 25
 
 cdef extern from "ValueID.h" namespace "OpenZWave":
 
@@ -227,6 +235,8 @@ PyNotifications = [
     EnumWithDoc('ValueRemoved').setDoc(
                          "A node value has been removed from OpenZWave's list.  This only occurs when a node is removed."),
     EnumWithDoc('ValueChanged').setDoc(
+                         "A node value has been updated from the Z-Wave network and it is different from the previous value."),
+    EnumWithDoc('ValueRefreshed').setDoc(
                          "A node value has been updated from the Z-Wave network."),
     EnumWithDoc('Group').setDoc(
                          "The associations for the node have changed. The application should rebuild any group information it holds about the node."),
@@ -246,18 +256,30 @@ PyNotifications = [
                          "Polling of a node has been successfully turned off by a call to Manager::DisablePoll"),
     EnumWithDoc('PollingEnabled').setDoc(
                          "Polling of a node has been successfully turned on by a call to Manager::EnablePoll"),
+    EnumWithDoc('CreateButton').setDoc(
+                         "Handheld controller button event created"),
+    EnumWithDoc('DeleteButton').setDoc(
+                         "Handheld controller button event deleted"),
+    EnumWithDoc('ButtonOn').setDoc(
+                         "Handheld controller button on pressed event"),
+    EnumWithDoc('ButtonOff').setDoc(
+                         "Handheld controller button off pressed event"),
     EnumWithDoc('DriverReady').setDoc(
                          "A driver for a PC Z-Wave controller has been added and is ready to use.  The notification will contain the controller's Home ID, which is needed to call most of the Manager methods."),
     EnumWithDoc('DriverReset').setDoc(
                          "All nodes and values for this driver have been removed.  This is sent instead of potentially hundreds of individual node and value notifications."),
     EnumWithDoc('MsgComplete').setDoc(
                          "The last message that was sent is now complete."),
+    EnumWithDoc('EssentialNodeQueriesComplete').setDoc(
+                         "The queries on a node that are essential to its operation have been completed. The node can now handle incoming messages."),
     EnumWithDoc('NodeQueriesComplete').setDoc(
                          "The initialisation queries on a node have been completed."),
     EnumWithDoc('AwakeNodesQueried').setDoc(
                          "All awake nodes have been queried, so client application can expected complete data for these nodes."),
     EnumWithDoc('AllNodesQueried').setDoc(
                          "All nodes have been queried, so client application can expected complete data."),
+    EnumWithDoc('Error').setDoc(
+                         "An error has occured that we need to report."),
     ]
 
 PyGenres = [
