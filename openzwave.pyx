@@ -12,6 +12,7 @@ cdef extern from "stdlib.h":
     void* malloc(size_t size)
     void free(void* ptr)
 
+ctypedef unsigned long long uint64
 ctypedef unsigned int uint32
 ctypedef int int32
 ctypedef int int16
@@ -89,7 +90,7 @@ cdef extern from "ValueID.h" namespace "OpenZWave":
         uint8 GetInstance()
         uint8 GetIndex()
         ValueType GetType()
-        uint32 GetId()
+        uint64 GetId()
 
 cdef extern from "Notification.h" namespace "OpenZWave":
 
@@ -301,7 +302,7 @@ PyValueTypes = [
     EnumWithDoc('Button').setDoc(   "A write-only value that is the equivalent of pressing a button to send a command to a device"),
     ]
 
-cdef map[uint32, ValueID] values_map 
+cdef map[uint64, ValueID] values_map 
 
 cdef addValueId(ValueID v, n):
     cdef string value
@@ -330,7 +331,7 @@ cdef addValueId(ValueID v, n):
                     'readOnly': manager.IsValueReadOnly(v),
                     }   
     
-    values_map.insert ( pair[uint32, ValueID] (v.GetId(), v)) 
+    values_map.insert ( pair[uint64, ValueID] (v.GetId(), v)) 
 
 cdef void callback(const_notification _notification, void* _context) with gil:
     cdef Notification* notification = <Notification*>_notification
@@ -1163,8 +1164,10 @@ if the Z-Wave message actually failed to get through.  Notification callbacks wi
             datatype = PyValueTypes[values_map.at(id).GetType()]
             
             if datatype == "Bool":
-                type_bool = value
-                self.manager.SetValue(values_map.at(id), type_bool)
+                if (value):
+                    self.manager.SetValue(values_map.at(id), string("true"))
+                else:
+                    self.manager.SetValue(values_map.at(id), string("false"))
             elif datatype == "Byte":
                 type_byte = value
                 self.manager.SetValue(values_map.at(id), type_byte)            
