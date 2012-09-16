@@ -1,5 +1,6 @@
 from cython.operator cimport dereference as deref
 from libcpp.map cimport map, pair
+from libc.stdint cimport uint64_t
 
 cdef extern from "<string>" namespace "std":
     cdef cppclass string:
@@ -89,7 +90,7 @@ cdef extern from "ValueID.h" namespace "OpenZWave":
         uint8 GetInstance()
         uint8 GetIndex()
         ValueType GetType()
-        uint32 GetId()
+        uint64_t GetId()
 
 cdef extern from "Notification.h" namespace "OpenZWave":
 
