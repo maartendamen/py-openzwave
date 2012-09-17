@@ -183,6 +183,7 @@ cdef extern from "Manager.h" namespace "OpenZWave":
         bint SetValue(ValueID& valueid, int16 value)
         bint SetValue(ValueID& valueid, string value)
         bint SetValueListSelection(ValueID& valueid, string selecteditem)
+        bint RefreshValue(ValueID& valueid)
         bint PressButton(ValueID& valueid)
         bint ReleaseButton(ValueID& valueid)
         uint8 GetNumSwitchPoints(ValueID& valueid)
@@ -1185,6 +1186,17 @@ if the Z-Wave message actually failed to get through.  Notification callbacks wi
                 type_string = string(value)
                 self.manager.SetValue(values_map.at(id), type_string)
                 
+    def refreshValue(self, id):
+        '''
+Refreshes the specified value from the Z-Wave network.
+A call to this function causes the library to send a message to the network to retrieve the current value
+of the specified ValueID (just like a poll, except only one-time, not recurring).
+@param id the ID of a value.
+        '''
+        if values_map.find(id) != values_map.end(): 
+            self.manager.RefreshValue(values_map.at(id))
+
+
 #        string GetValueLabel(ValueID& valueid)
 #        void SetValueLabel(ValueID& valueid, string value)
 #        string GetValueUnits(ValueID& valueid)
