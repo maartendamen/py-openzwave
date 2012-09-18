@@ -102,6 +102,7 @@ cdef extern from "Notification.h" namespace "OpenZWave":
         uint8 GetGroupIdx()
         uint8 GetEvent()
         uint8 GetByte()
+        uint8 GetErrorCode()
 
 ctypedef void (*pfnOnNotification_t)(const_notification _pNotification, void* _context )
 
@@ -268,6 +269,8 @@ PyNotifications = [
                          "Handheld controller button off pressed event"),
     EnumWithDoc('DriverReady').setDoc(
                          "A driver for a PC Z-Wave controller has been added and is ready to use.  The notification will contain the controller's Home ID, which is needed to call most of the Manager methods."),
+    EnumWithDoc('DriverFailed').setDoc(
+                         "Driver failed to load."),
     EnumWithDoc('DriverReset').setDoc(
                          "All nodes and values for this driver have been removed.  This is sent instead of potentially hundreds of individual node and value notifications."),
     EnumWithDoc('MsgComplete').setDoc(
@@ -345,6 +348,8 @@ cdef void callback(const_notification _notification, void* _context) with gil:
         n['groupIdx'] = notification.GetGroupIdx()
     if notification.GetType() == Type_NodeEvent:
         n['event'] = notification.GetEvent()
+    if notification.GetType() == Type_Error:
+        n['errorCode'] = notification.GetErrorCode()
 
     addValueId(notification.GetValueID(), n)
 
