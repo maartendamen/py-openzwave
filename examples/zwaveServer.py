@@ -36,8 +36,8 @@ from common.ozwWrapper import ZWaveWrapper, ZWaveNode, ZWaveValueNode
 from flask import Flask, render_template, request, redirect, url_for, flash, g
 from functools import wraps
 
-from flaskext import wtf
-from flaskext.wtf import validators
+from flask.ext import wtf
+from flask.ext.wtf import validators
 
 class MethodRewriteMiddleware(object):
     """Middleware for HTTP method rewriting.
