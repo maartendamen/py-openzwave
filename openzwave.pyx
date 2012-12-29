@@ -59,7 +59,7 @@ cdef extern from "Notification.h" namespace "OpenZWave::Notification":
         Type_NodeQueriesComplete = 22
         Type_AwakeNodesQueried = 23
         Type_AllNodesQueried = 24
-        Type_Error = 25
+        Type_Notification = 25
 
 cdef extern from "ValueID.h" namespace "OpenZWave":
 
@@ -102,7 +102,7 @@ cdef extern from "Notification.h" namespace "OpenZWave":
         uint8 GetGroupIdx()
         uint8 GetEvent()
         uint8 GetByte()
-        uint8 GetErrorCode()
+        uint8 GetNotification()
 
 ctypedef void (*pfnOnNotification_t)(const_notification _pNotification, void* _context )
 
@@ -348,8 +348,8 @@ cdef void callback(const_notification _notification, void* _context) with gil:
         n['groupIdx'] = notification.GetGroupIdx()
     if notification.GetType() == Type_NodeEvent:
         n['event'] = notification.GetEvent()
-    if notification.GetType() == Type_Error:
-        n['errorCode'] = notification.GetErrorCode()
+    if notification.GetType() == Type_Notification:
+        n['notificationCode'] = notification.GetNotification()
 
     addValueId(notification.GetValueID(), n)
 
