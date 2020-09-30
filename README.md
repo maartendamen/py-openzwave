@@ -5,6 +5,7 @@ What is py-openzwave?
 ---------------------
 py-openzwave is a python wrapper around the open-zwave c++ project.
 This allows you to interact with z-wave networks from withing Python.
+It is a Collection of Open Source Libraries and Language Wrappers that allow applications to talk to a Z-Wave Network via a USB Controller
 
 Build instructions for Windows
 ------------------------------
